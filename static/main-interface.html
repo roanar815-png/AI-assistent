@@ -1,0 +1,1294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Ассистент - Опора России</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .container {
+            width: 95%;
+            max-width: 1200px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 90vh;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .status-indicator {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            width: 12px;
+            height: 12px;
+            background: #4CAF50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #e0e0e0;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: white;
+        }
+        
+        .quick-actions {
+            padding: 20px;
+            background: #f8f9ff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .action-button {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 15px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .action-button:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .action-icon {
+            font-size: 32px;
+            margin-bottom: 5px;
+        }
+        
+        .action-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        
+        .action-description {
+            font-size: 12px;
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+        }
+        
+        .message.user {
+            justify-content: flex-end;
+        }
+        
+        .message.bot {
+            justify-content: flex-start;
+        }
+        
+        .message-content {
+            max-width: 70%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            position: relative;
+            word-wrap: break-word;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+        
+        .message.user .message-content {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+        
+        .message.bot .message-content {
+            background: white;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .message.bot .message-content strong {
+            color: #667eea;
+            font-weight: 600;
+        }
+        
+        .message.bot .message-content em {
+            color: #666;
+            font-style: italic;
+        }
+        
+        .message.bot .message-content li {
+            margin: 5px 0;
+            padding-left: 10px;
+        }
+        
+        .message.bot .message-content hr {
+            margin: 15px 0;
+            border: none;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+        
+        .chat-input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 15px 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        
+        .chat-input:focus {
+            border-color: #667eea;
+        }
+        
+        .send-button {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+        
+        .send-button:hover {
+            transform: scale(1.1);
+        }
+        
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 15px 20px;
+            background: white;
+            border-radius: 20px;
+            border: 1px solid #e0e0e0;
+            max-width: 70%;
+        }
+        
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-10px); }
+        }
+        
+        .sidebar-section {
+            margin-bottom: 30px;
+        }
+        
+        .sidebar-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        .sidebar-button {
+            width: 100%;
+            padding: 12px 16px;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 14px;
+            transition: all 0.2s;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .sidebar-button:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .sidebar-button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .attachment-link {
+            display: inline-block;
+            background: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 8px;
+            padding: 10px 15px;
+            color: #1976d2;
+            text-decoration: none;
+            margin: 5px 0;
+            transition: all 0.3s;
+        }
+        
+        .attachment-link:hover {
+            background: #2196f3;
+            color: white;
+        }
+        
+        /* Кнопка скачивания документа */
+        .message-content a.download-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4) !important;
+        }
+        
+        .message-content a.download-link:active {
+            transform: translateY(0);
+        }
+        
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .container {
+                width: 100%;
+                height: 100vh;
+                border-radius: 0;
+            }
+            
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 200px;
+            }
+            
+            .actions-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .message-content {
+                max-width: 85%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="status-indicator"></div>
+            <h1>🤖 AI Ассистент</h1>
+            <p>Опоры России - Ваш помощник в малом и среднем бизнесе</p>
+        </div>
+        
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="sidebar-section">
+                    <div class="sidebar-title">Аналитика</div>
+                    <button class="sidebar-button" onclick="showAnalytics()">
+                        Анализ тенденций МСП
+                    </button>
+                    <button class="sidebar-button" onclick="showMarketAnalysis()">
+                        Прогнозирование рынка
+                    </button>
+                    <button class="sidebar-button" onclick="showBusinessInsights()">
+                        Бизнес-инсайты
+                    </button>
+                </div>
+                
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">🏢 Опора России</div>
+                    <button class="sidebar-button" onclick="showMembershipApplication()">
+                        📝 Заявка на вступление
+                    </button>
+                    <button class="sidebar-button" onclick="showMembershipBenefits()">
+                        🎁 Преимущества членства
+                    </button>
+                    <button class="sidebar-button" onclick="showRegionalOffices()">
+                        🏛️ Региональные отделения
+                    </button>
+                </div>
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">⚖️ Законодательство</div>
+                    <button class="sidebar-button" onclick="showLegislationMonitoring()">
+ Мониторинг законов
+                    </button>
+                    <button class="sidebar-button" onclick="showRecentChanges()">
+                        🔄 Последние изменения
+                    </button>
+                    <button class="sidebar-button" onclick="showComplianceCheck()">
+                        ✅ Проверка соответствия
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-area">
+                <div class="quick-actions">
+                    <div class="actions-grid">
+                        <button class="action-button" onclick="quickAction('analytics')">
+                            <div class="action-icon"></div>
+                            <div class="action-title">Анализ тенденций</div>
+                            <div class="action-description">Анализ и прогнозирование тенденций в малом и среднем бизнесе</div>
+                        </button>
+                        
+                        <button class="action-button" onclick="quickAction('membership')">
+                            <div class="action-icon">📝</div>
+                            <div class="action-title">Заявка на вступление</div>
+                            <div class="action-description">Подача заявки на вступление в Опору России</div>
+                        </button>
+                        
+                        <button class="action-button" onclick="quickAction('legislation')">
+                            <div class="action-icon">⚖️</div>
+                            <div class="action-title">Мониторинг законов</div>
+                            <div class="action-description">Мониторинг законодательства малого и среднего бизнеса</div>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="chat-messages" id="chat-messages">
+                    <!-- Сообщения будут добавляться здесь -->
+                </div>
+                
+                <div class="chat-input-area">
+                    <div class="input-container">
+                        <input type="text" id="message-input" class="chat-input" 
+                               placeholder="Напишите сообщение или выберите действие выше..." 
+                               onkeypress="handleKeyPress(event)">
+                        <button id="send-button" class="send-button" onclick="sendMessage()">
+                            ➤
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost/api';  // API через Nginx на порту 80
+        const USER_ID = 'user-' + Math.random().toString(36).substr(2, 9);
+        
+        let isTyping = false;
+        
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', function() {
+            addMessage('👋 Добро пожаловать в AI Ассистент Опоры России!', 'bot');
+            addMessage(' Я помогу вам с анализом бизнеса, созданием документов, мониторингом законодательства и вступлением в Опору России.', 'bot');
+            addMessage(' Выберите действие в боковой панели или используйте быстрые кнопки выше.', 'bot');
+        });
+        
+        function addMessage(text, sender, attachments = null) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Форматируем текст с поддержкой Markdown
+            const formattedText = formatMessage(text);
+            contentDiv.innerHTML = formattedText;
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            contentDiv.appendChild(timeDiv);
+            
+            // Добавляем вложения если есть
+            if (attachments && attachments.length > 0) {
+                const attachmentsDiv = document.createElement('div');
+                attachmentsDiv.style.marginTop = '10px';
+                
+                attachments.forEach(attachment => {
+                    const link = document.createElement('a');
+                    link.href = attachment.url;
+                    link.download = attachment.filename;
+                    link.className = 'attachment-link';
+                    link.textContent = `📄 Скачать: ${attachment.filename}`;
+                    link.target = '_blank';
+                    attachmentsDiv.appendChild(link);
+                });
+                
+                contentDiv.appendChild(attachmentsDiv);
+            }
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function formatMessage(text) {
+            if (!text) return '';
+            
+            // Экранируем HTML
+            let formatted = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            
+            // Конвертируем markdown **жирный**
+            formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            
+            // Конвертируем URLs в кликабельные ссылки
+            const urlPattern = /(https?:\/\/[^\s]+)/g;
+            formatted = formatted.replace(urlPattern, (url) => {
+                // Проверяем, содержит ли URL путь к документу
+                if (url.includes('/api/documents/download')) {
+                    return `<a href="${url}" target="_blank" class="download-link" download style="display: inline-block; margin: 10px 0; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white !important; text-decoration: none; border-radius: 8px; font-weight: 600; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3); transition: all 0.3s ease;">📥 Скачать документ</a>`;
+                }
+                return `<a href="${url}" target="_blank" style="color: #667eea; text-decoration: underline;">${url}</a>`;
+            });
+            
+            // Конвертируем маркеры списка
+            formatted = formatted.replace(/^• (.*$)/gm, '<li>$1</li>');
+            formatted = formatted.replace(/^(\d+)\. (.*$)/gm, '<li>$1. $2</li>');
+            
+            // Горизонтальная линия
+            formatted = formatted.replace(/---/g, '<hr style="margin: 10px 0; border: none; border-top: 1px solid #e0e0e0;">');
+            
+            // Переносы строк
+            formatted = formatted.replace(/\n/g, '<br>');
+            
+            return formatted;
+        }
+        
+        function showTypingIndicator() {
+            if (isTyping) return;
+            
+            isTyping = true;
+            const chatMessages = document.getElementById('chat-messages');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message bot';
+            typingDiv.id = 'typing-indicator';
+            
+            const typingContent = document.createElement('div');
+            typingContent.className = 'typing-indicator';
+            typingContent.innerHTML = `
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <span style="margin-left: 10px; color: #666;">Ассистент печатает...</span>
+            `;
+            
+            typingDiv.appendChild(typingContent);
+            chatMessages.appendChild(typingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function hideTypingIndicator() {
+            isTyping = false;
+            const typingIndicator = document.getElementById('typing-indicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+        
+        // Функции для быстрых действий
+        function quickAction(action) {
+            switch(action) {
+                case 'analytics':
+                    sendMessage('Проведите анализ тенденций в малом и среднем бизнесе');
+                    break;
+                case 'membership':
+                    sendMessage('Помогите подать заявку на вступление в Опору России');
+                    break;
+                case 'legislation':
+                    sendMessage('Покажите мониторинг законодательства малого и среднего бизнеса');
+                    break;
+                case 'documents':
+                    sendMessage('Создайте документ с автоматическим заполнением');
+                    break;
+            }
+        }
+        
+        // Функции для боковой панели
+        function showAnalytics() {
+            sendMessage('Покажите анализ тенденций в малом и среднем бизнесе');
+        }
+        
+        function showMarketAnalysis() {
+            sendMessage('Проведите прогнозирование рынка для МСП');
+        }
+        
+        function showBusinessInsights() {
+            sendMessage('Предоставьте бизнес-инсайты и рекомендации');
+        }
+        
+        function showDocumentCreation() {
+            sendMessage('Помогите создать документ с автоматическим заполнением');
+        }
+        
+        function showTemplateManager() {
+            window.open('/static/template-manager.html', '_blank');
+        }
+        
+        function showDocumentHistory() {
+            sendMessage('Покажите историю созданных документов');
+        }
+        
+        function showMembershipApplication() {
+            sendMessage('Помогите подать заявку на вступление в Опору России');
+        }
+        
+        function showMembershipBenefits() {
+            sendMessage('Расскажите о преимуществах членства в Опоре России');
+        }
+        
+        function showRegionalOffices() {
+            sendMessage('Покажите контакты региональных отделений Опоры России');
+        }
+        
+        function showLegislationMonitoring() {
+            sendMessage('Покажите мониторинг законодательства малого и среднего бизнеса');
+        }
+        
+        function showRecentChanges() {
+            sendMessage('Покажите последние изменения в законодательстве МСП');
+        }
+        
+        function showComplianceCheck() {
+            sendMessage('Проведите проверку соответствия требованиям законодательства');
+        }
+        
+        async function sendMessage(messageText = null) {
+            const input = document.getElementById('message-input');
+            const message = messageText || input.value.trim();
+            
+            if (!message) return;
+            
+            // Отображаем сообщение пользователя
+            addMessage(message, 'user');
+            if (!messageText) input.value = '';
+            
+            // Блокируем кнопку отправки
+            const sendButton = document.getElementById('send-button');
+            sendButton.disabled = true;
+            
+            try {
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        message: message
+                    })
+                });
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                // Отображаем ответ бота
+                addMessage(data.response, 'bot');
+                
+                // Показываем предложение документа если есть
+                if (data.document_suggestion && data.document_suggestion.suggested) {
+                    showDocumentSuggestion(data.document_suggestion);
+                }
+                
+            } catch (error) {
+                console.error('Ошибка отправки сообщения:', error);
+                hideTypingIndicator();
+                addMessage('❌ Извините, произошла ошибка. Попробуйте позже.', 'bot');
+            } finally {
+                sendButton.disabled = false;
+            }
+        }
+        
+        function showDocumentSuggestion(suggestion) {
+            // Если документ уже создан автоматически, показываем красивую карточку с информацией
+            if (suggestion.created_document && suggestion.created_document.status === 'success') {
+                const chatMessages = document.getElementById('chat-messages');
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message bot';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.style.background = 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)';
+                contentDiv.style.borderLeft = '4px solid #28a745';
+                contentDiv.style.padding = '20px';
+                contentDiv.style.borderRadius = '15px';
+                contentDiv.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.2)';
+                
+                const completeness = suggestion.completeness_analysis || {};
+                const recommendation = suggestion.template_recommendation || {};
+                
+                contentDiv.innerHTML = `
+                    <div style="font-size: 24px; margin-bottom: 15px;">✅ Документ успешно создан!</div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <strong>📄 Тип документа:</strong> ${recommendation.document_category || 'документ'}<br>
+                        <strong> Шаблон:</strong> ${recommendation.suggested_template_name || 'выбранный шаблон'}<br>
+                        <strong>📁 Файл:</strong> ${suggestion.created_document.filepath.split('/').pop()}
+                    </div>
+                    
+                    ${completeness.completeness_score ? `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <div style="margin-bottom: 10px;">
+                            <strong> Статистика заполнения:</strong>
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #e3f2fd; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: #1976d2;">${completeness.completeness_score}%</div>
+                                <div style="font-size: 12px; color: #666;">Полнота</div>
+                            </div>
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #fff3e0; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: #f57c00;">${completeness.confidence_score || 0}%</div>
+                                <div style="font-size: 12px; color: #666;">Уверенность</div>
+                            </div>
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #f3e5f5; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 18px; font-weight: bold; color: #7b1fa2;">${getQualityIcon(completeness.data_quality)}</div>
+                                <div style="font-size: 12px; color: #666;">Качество</div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                    
+                    <a href="http://localhost${suggestion.created_document.download_url}" 
+                       style="display: block; background: linear-gradient(135deg, #28a745 0%, #218838 100%); 
+                              color: white; text-decoration: none; padding: 15px 25px; 
+                              border-radius: 10px; text-align: center; margin-top: 15px;
+                              font-weight: bold; transition: all 0.3s; box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);"
+                       onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(40, 167, 69, 0.4)';"
+                       onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(40, 167, 69, 0.3)';">
+                        📥 Скачать документ
+                    </a>
+                `;
+                
+                messageDiv.appendChild(contentDiv);
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                return;
+            }
+            
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Определяем цвет и стиль в зависимости от полноты данных
+            const completeness = suggestion.completeness_analysis || {};
+            const needsData = suggestion.needs_data !== false;
+            
+            if (needsData) {
+                contentDiv.style.background = 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)';
+                contentDiv.style.borderLeft = '4px solid #ffc107';
+            } else {
+                contentDiv.style.background = 'linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%)';
+                contentDiv.style.borderLeft = '4px solid #17a2b8';
+            }
+            contentDiv.style.padding = '20px';
+            contentDiv.style.borderRadius = '15px';
+            contentDiv.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+            
+            // Добавляем информацию о полноте данных
+            const recommendation = suggestion.template_recommendation || {};
+            let htmlContent = '';
+            
+            // Заголовок
+            if (needsData) {
+                htmlContent += `<div style="font-size: 20px; margin-bottom: 15px;">⚠️ Требуются дополнительные данные</div>`;
+            } else {
+                htmlContent += `<div style="font-size: 20px; margin-bottom: 15px;">✅ Готов создать документ!</div>`;
+            }
+            
+            // Информация о документе
+            if (recommendation.suggested_template_name) {
+                htmlContent += `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <strong>📄 Тип документа:</strong> ${recommendation.document_category || 'документ'}<br>
+                        <strong> Рекомендуемый шаблон:</strong> ${recommendation.suggested_template_name}<br>
+                        <strong> Уверенность:</strong> ${recommendation.confidence || 0}%
+                    </div>
+                `;
+            }
+            
+            // Статистика заполнения
+            if (completeness.completeness_score !== undefined) {
+                htmlContent += `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <div style="margin-bottom: 10px;">
+                            <strong> Статистика заполнения:</strong>
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #e3f2fd; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: #1976d2;">${completeness.completeness_score}%</div>
+                                <div style="font-size: 12px; color: #666;">Полнота</div>
+                            </div>
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #fff3e0; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: #f57c00;">${completeness.confidence_score || 0}%</div>
+                                <div style="font-size: 12px; color: #666;">Уверенность</div>
+                            </div>
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #f3e5f5; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 18px; font-weight: bold; color: #7b1fa2;">${getQualityIcon(completeness.data_quality)}</div>
+                                <div style="font-size: 12px; color: #666;">Качество</div>
+                            </div>
+                        </div>
+                        
+                        ${completeness.filled_fields && completeness.filled_fields.length > 0 ? `
+                        <div style="margin-top: 10px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Заполненные поля (${completeness.filled_fields.length}):</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                ${completeness.filled_fields.map(field => `<span style="background: #d4edda; color: #155724; padding: 4px 8px; border-radius: 4px; font-size: 11px;">✓ ${field}</span>`).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                        
+                        ${completeness.missing_fields && completeness.missing_fields.length > 0 ? `
+                        <div style="margin-top: 10px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Недостающие поля (${completeness.missing_fields.length}):</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                ${completeness.missing_fields.map(field => `<span style="background: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 4px; font-size: 11px;">✗ ${field}</span>`).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            // Рекомендации
+            if (completeness.recommendations && completeness.recommendations.length > 0) {
+                htmlContent += `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <strong> Рекомендации:</strong>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            ${completeness.recommendations.map(rec => `<li style="margin: 5px 0;">${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            // Предлагаемые вопросы
+            if (completeness.suggested_questions && completeness.suggested_questions.length > 0) {
+                htmlContent += `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <strong>❓ Чтобы заполнить недостающие данные, ответьте на вопросы:</strong>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            ${completeness.suggested_questions.slice(0, 3).map(q => `<li style="margin: 5px 0;">${q}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            contentDiv.innerHTML = htmlContent;
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            contentDiv.appendChild(timeDiv);
+            
+            // Если нужны данные, показываем форму
+            if (suggestion.needs_data && suggestion.required_fields) {
+                const formDiv = document.createElement('div');
+                formDiv.style.marginTop = '20px';
+                formDiv.style.padding = '20px';
+                formDiv.style.background = 'white';
+                formDiv.style.border = '1px solid #e0e0e0';
+                formDiv.style.borderRadius = '10px';
+                
+                // Создаем поля формы на основе требований
+                const fieldRequirements = suggestion.required_fields;
+                let formFields = '';
+                
+                for (const [field, label] of Object.entries(fieldRequirements)) {
+                    const inputType = field === 'email' ? 'email' : 
+                                     field === 'phone' ? 'tel' : 
+                                     field === 'birth_date' ? 'date' : 'text';
+                    const placeholder = label;
+                    const value = suggestion.user_data[field] || '';
+                    
+                    formFields += `
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">${label}:</label>
+                            <input type="${inputType}" id="${field}" placeholder="${placeholder}" value="${value}" 
+                                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                    `;
+                }
+                
+                formDiv.innerHTML = `
+                    <h4 style="margin-bottom: 20px; color: #333; font-size: 16px;">📝 Заполните данные для создания документа:</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        ${formFields}
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="fillDataAndCreateDocument('${suggestion.templates.map(t => t.template_id).join(',')}')" 
+                                style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                            ✅ Заполнить и создать документ
+                        </button>
+                        <button onclick="showTemplatesDirectly('${suggestion.templates.map(t => t.template_id).join(',')}')" 
+                                style="background: #667eea; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                            📄 Сразу выбрать шаблон
+                        </button>
+                    </div>
+                `;
+                
+                contentDiv.appendChild(formDiv);
+            } else {
+                // Создаем улучшенный список шаблонов с индикацией рекомендуемого
+                if (suggestion.templates && suggestion.templates.length > 0) {
+                    const templatesDiv = document.createElement('div');
+                    templatesDiv.style.marginTop = '15px';
+                    
+                    const recommendedTemplateId = recommendation.suggested_template_id;
+                    
+                    suggestion.templates.forEach(template => {
+                        const isRecommended = template.template_id === recommendedTemplateId;
+                        
+                        const templateButton = document.createElement('button');
+                        templateButton.style.display = 'flex';
+                        templateButton.style.alignItems = 'center';
+                        templateButton.style.justifyContent = 'space-between';
+                        templateButton.style.width = '100%';
+                        templateButton.style.margin = '8px 0';
+                        templateButton.style.padding = '15px 20px';
+                        templateButton.style.background = isRecommended ? 'linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%)' : 'white';
+                        templateButton.style.border = isRecommended ? '3px solid #17a2b8' : '2px solid #667eea';
+                        templateButton.style.borderRadius = '12px';
+                        templateButton.style.cursor = 'pointer';
+                        templateButton.style.textAlign = 'left';
+                        templateButton.style.fontSize = '14px';
+                        templateButton.style.fontWeight = isRecommended ? '600' : 'normal';
+                        templateButton.style.transition = 'all 0.3s';
+                        templateButton.style.boxShadow = isRecommended ? '0 4px 12px rgba(23, 162, 184, 0.3)' : '0 2px 4px rgba(0,0,0,0.1)';
+                        
+                        const nameSpan = document.createElement('span');
+                        nameSpan.textContent = template.name;
+                        templateButton.appendChild(nameSpan);
+                        
+                        if (isRecommended) {
+                            const badge = document.createElement('span');
+                            badge.textContent = '⭐ Рекомендуем';
+                            badge.style.background = '#17a2b8';
+                            badge.style.color = 'white';
+                            badge.style.padding = '4px 12px';
+                            badge.style.borderRadius = '12px';
+                            badge.style.fontSize = '12px';
+                            badge.style.fontWeight = 'bold';
+                            templateButton.appendChild(badge);
+                        }
+                        
+                        templateButton.onclick = () => createDocument(template.template_id, suggestion.user_data, suggestion.conversation_data);
+                        templateButton.onmouseover = () => {
+                            if (!isRecommended) {
+                                templateButton.style.background = '#667eea';
+                                templateButton.style.color = 'white';
+                            } else {
+                                templateButton.style.transform = 'translateY(-2px)';
+                                templateButton.style.boxShadow = '0 6px 16px rgba(23, 162, 184, 0.4)';
+                            }
+                        };
+                        templateButton.onmouseout = () => {
+                            if (!isRecommended) {
+                                templateButton.style.background = 'white';
+                                templateButton.style.color = '#333';
+                            } else {
+                                templateButton.style.transform = 'translateY(0)';
+                                templateButton.style.boxShadow = '0 4px 12px rgba(23, 162, 184, 0.3)';
+                            }
+                        };
+                        templatesDiv.appendChild(templateButton);
+                    });
+                    
+                    contentDiv.appendChild(templatesDiv);
+                }
+            }
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        async function createDocument(templateId, userData, conversationData) {
+            try {
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/create-document`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        template_id: templateId,
+                        user_data: userData,
+                        conversation_data: conversationData,
+                        send_email: true
+                    })
+                });
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.status === 'success') {
+                    addMessage(`✅ ${data.message}`, 'bot', [{
+                        url: data.download_url,
+                        filename: data.filepath.split('/').pop()
+                    }]);
+                } else {
+                    addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+                }
+                
+            } catch (error) {
+                console.error('Ошибка создания документа:', error);
+                hideTypingIndicator();
+                addMessage('❌ Ошибка создания документа. Попробуйте позже.', 'bot');
+            }
+        }
+        
+        function fillDataAndCreateDocument(templateIds) {
+            // Собираем данные из формы
+            const userData = {
+                user_id: USER_ID
+            };
+            
+            // Собираем все заполненные поля
+            const possibleFields = ['full_name', 'email', 'phone', 'organization', 'position', 'inn', 'address', 'passport', 'birth_date', 'business_type'];
+            possibleFields.forEach(field => {
+                const element = document.getElementById(field);
+                if (element) {
+                    userData[field] = element.value;
+                }
+            });
+            
+            // Показываем шаблоны с заполненными данными
+            showTemplatesWithData(templateIds, userData);
+        }
+        
+        async function showTemplatesWithData(templateIds, userData) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.style.background = '#d4edda';
+            contentDiv.style.borderLeft = '4px solid #28a745';
+            contentDiv.innerHTML = '✅ **Данные заполнены!** Теперь выберите подходящий шаблон:';
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            contentDiv.appendChild(timeDiv);
+            
+            // Создаем список шаблонов
+            const templatesDiv = document.createElement('div');
+            templatesDiv.style.marginTop = '15px';
+            
+            try {
+                // Получаем реальные шаблоны из API
+                const response = await fetch(`${API_URL}/documents/templates/list`);
+                const templates = await response.json();
+                
+                if (templates && templates.length > 0) {
+                    templates.forEach(template => {
+                        const templateButton = document.createElement('button');
+                        templateButton.style.display = 'block';
+                        templateButton.style.width = '100%';
+                        templateButton.style.margin = '8px 0';
+                        templateButton.style.padding = '15px';
+                        templateButton.style.background = 'white';
+                        templateButton.style.border = '2px solid #28a745';
+                        templateButton.style.borderRadius = '10px';
+                        templateButton.style.cursor = 'pointer';
+                        templateButton.style.textAlign = 'left';
+                        templateButton.style.fontSize = '14px';
+                        templateButton.style.transition = 'all 0.3s';
+                        templateButton.textContent = `📄 ${template.name}`;
+                        templateButton.onclick = () => createDocument(template.template_id, userData, { message: 'Создание документа', response: 'Документ создается' });
+                        templateButton.onmouseover = () => {
+                            templateButton.style.background = '#28a745';
+                            templateButton.style.color = 'white';
+                        };
+                        templateButton.onmouseout = () => {
+                            templateButton.style.background = 'white';
+                            templateButton.style.color = '#333';
+                        };
+                        templatesDiv.appendChild(templateButton);
+                    });
+                } else {
+                    // Fallback к статическим шаблонам
+                    const templateList = [
+                        { template_id: '96b8904f-58e6-48f9-ae4e-da0a3e790fc7', name: '📄 Заявление на вступление в Опору России (физическое лицо)' },
+                        { template_id: 'ae860c71-f140-42d0-bdc9-9b30d7542c61', name: ' Анкета на вступление в Опору России (физическое лицо)' },
+                        { template_id: 'a19cc415-120f-4bc6-95c8-c1ae82fe41ca', name: '📝 АНКЕТА на вступление в «ОПОРУ Америки»' },
+                        { template_id: 'ea89391a-cb80-47ea-bb4d-903cdb2190d2', name: '📑 АНКЕТА на вступление в «О73 России»' }
+                    ];
+                    
+                    templateList.forEach(template => {
+                        const templateButton = document.createElement('button');
+                        templateButton.style.display = 'block';
+                        templateButton.style.width = '100%';
+                        templateButton.style.margin = '8px 0';
+                        templateButton.style.padding = '15px';
+                        templateButton.style.background = 'white';
+                        templateButton.style.border = '2px solid #28a745';
+                        templateButton.style.borderRadius = '10px';
+                        templateButton.style.cursor = 'pointer';
+                        templateButton.style.textAlign = 'left';
+                        templateButton.style.fontSize = '14px';
+                        templateButton.style.transition = 'all 0.3s';
+                        templateButton.textContent = template.name;
+                        templateButton.onclick = () => createDocument(template.template_id, userData, { message: 'Создание документа', response: 'Документ создается' });
+                        templateButton.onmouseover = () => {
+                            templateButton.style.background = '#28a745';
+                            templateButton.style.color = 'white';
+                        };
+                        templateButton.onmouseout = () => {
+                            templateButton.style.background = 'white';
+                            templateButton.style.color = '#333';
+                        };
+                        templatesDiv.appendChild(templateButton);
+                    });
+                }
+            } catch (error) {
+                console.error('Ошибка получения шаблонов:', error);
+                contentDiv.innerHTML += '<p style="color: #dc3545; margin-top: 10px;">❌ Ошибка загрузки шаблонов</p>';
+            }
+            
+            contentDiv.appendChild(templatesDiv);
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        async function showTemplatesDirectly(templateIds) {
+            // Показываем шаблоны сразу без ввода дополнительных данных
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.style.background = '#e3f2fd';
+            contentDiv.style.borderLeft = '4px solid #2196f3';
+            contentDiv.innerHTML = '🚀 **Отлично!** Выберите шаблон для создания документа:';
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            contentDiv.appendChild(timeDiv);
+            
+            // Создаем список шаблонов
+            const templatesDiv = document.createElement('div');
+            templatesDiv.style.marginTop = '15px';
+            
+            try {
+                // Получаем реальные шаблоны из API
+                const response = await fetch(`${API_URL}/documents/templates/list`);
+                const templates = await response.json();
+                
+                if (templates && templates.length > 0) {
+                    templates.forEach(template => {
+                        const templateButton = document.createElement('button');
+                        templateButton.style.display = 'block';
+                        templateButton.style.width = '100%';
+                        templateButton.style.margin = '8px 0';
+                        templateButton.style.padding = '15px';
+                        templateButton.style.background = 'white';
+                        templateButton.style.border = '2px solid #2196f3';
+                        templateButton.style.borderRadius = '10px';
+                        templateButton.style.cursor = 'pointer';
+                        templateButton.style.textAlign = 'left';
+                        templateButton.style.fontSize = '14px';
+                        templateButton.style.transition = 'all 0.3s';
+                        templateButton.textContent = `📄 ${template.name}`;
+                        templateButton.onclick = () => createDocument(template.template_id, { user_id: USER_ID }, { message: 'Создание документа', response: 'Документ создается' });
+                        templateButton.onmouseover = () => {
+                            templateButton.style.background = '#2196f3';
+                            templateButton.style.color = 'white';
+                        };
+                        templateButton.onmouseout = () => {
+                            templateButton.style.background = 'white';
+                            templateButton.style.color = '#333';
+                        };
+                        templatesDiv.appendChild(templateButton);
+                    });
+                } else {
+                    // Fallback к статическим шаблонам
+                    const templateList = [
+                        { template_id: '96b8904f-58e6-48f9-ae4e-da0a3e790fc7', name: '📄 Заявление на вступление в Опору России (физическое лицо)' },
+                        { template_id: 'ae860c71-f140-42d0-bdc9-9b30d7542c61', name: ' Анкета на вступление в Опору России (физическое лицо)' },
+                        { template_id: 'a19cc415-120f-4bc6-95c8-c1ae82fe41ca', name: '📝 АНКЕТА на вступление в «ОПОРУ Америки»' },
+                        { template_id: 'ea89391a-cb80-47ea-bb4d-903cdb2190d2', name: '📑 АНКЕТА на вступление в «О73 России»' }
+                    ];
+                    
+                    templateList.forEach(template => {
+                        const templateButton = document.createElement('button');
+                        templateButton.style.display = 'block';
+                        templateButton.style.width = '100%';
+                        templateButton.style.margin = '8px 0';
+                        templateButton.style.padding = '15px';
+                        templateButton.style.background = 'white';
+                        templateButton.style.border = '2px solid #2196f3';
+                        templateButton.style.borderRadius = '10px';
+                        templateButton.style.cursor = 'pointer';
+                        templateButton.style.textAlign = 'left';
+                        templateButton.style.fontSize = '14px';
+                        templateButton.style.transition = 'all 0.3s';
+                        templateButton.textContent = template.name;
+                        templateButton.onclick = () => createDocument(template.template_id, { user_id: USER_ID }, { message: 'Создание документа', response: 'Документ создается' });
+                        templateButton.onmouseover = () => {
+                            templateButton.style.background = '#2196f3';
+                            templateButton.style.color = 'white';
+                        };
+                        templateButton.onmouseout = () => {
+                            templateButton.style.background = 'white';
+                            templateButton.style.color = '#333';
+                        };
+                        templatesDiv.appendChild(templateButton);
+                    });
+                }
+            } catch (error) {
+                console.error('Ошибка получения шаблонов:', error);
+                contentDiv.innerHTML += '<p style="color: #dc3545; margin-top: 10px;">❌ Ошибка загрузки шаблонов</p>';
+            }
+            
+            contentDiv.appendChild(templatesDiv);
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+        // Вспомогательная функция для отображения качества данных
+        function getQualityIcon(quality) {
+            const qualityMap = {
+                'excellent': '🌟 Отлично',
+                'good': '✅ Хорошо',
+                'fair': '⚠️ Средне',
+                'poor': '❌ Низкое',
+                'unknown': '❓ Неизвестно'
+            };
+            return qualityMap[quality] || qualityMap['unknown'];
+        }
+    </script>
+</body>
+</html>

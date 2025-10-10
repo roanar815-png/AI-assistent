@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Ассистент - Опора России</title>
+    <link rel="stylesheet" href="chat-widget.css">
+</head>
+<body>
+    <!-- Кнопка открытия чата -->
+    <div id="chat-button" class="chat-button">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+    </div>
+
+    <!-- Окно чата -->
+    <div id="chat-widget" class="chat-widget">
+        <div class="chat-header">
+            <div class="chat-header-content">
+                <div class="chat-avatar">AI</div>
+                <div class="chat-title">
+                    <h3>AI Ассистент</h3>
+                    <p class="chat-status">Опора России</p>
+                </div>
+            </div>
+            <button id="close-chat" class="close-button">&times;</button>
+        </div>
+
+        <div class="chat-messages" id="chat-messages">
+            <div class="message bot-message">
+                <div class="message-content">
+                    Здравствуйте! Я — AI ассистент организации «Опора России». 
+                    Я помогу вам с вопросами о малом и среднем бизнесе, 
+                    приему заявок на вступление, и многом другом. Чем могу помочь?
+                </div>
+            </div>
+        </div>
+
+        <div class="quick-actions" id="quick-actions">
+            <button class="quick-action-btn" data-action="sme-analysis">📊 Анализ МСП</button>
+            <button class="quick-action-btn" data-action="application">📝 Подать заявку</button>
+            <button class="quick-action-btn" data-action="events">📅 Мероприятия</button>
+            <button class="quick-action-btn" data-action="legislation">⚖️ Законодательство</button>
+        </div>
+
+        <div class="chat-input-wrapper">
+            <input 
+                type="text" 
+                id="chat-input" 
+                class="chat-input" 
+                placeholder="Введите сообщение..."
+                autocomplete="off"
+            >
+            <button id="send-button" class="send-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <script src="chat-widget.js"></script>
+</body>
+</html>
+

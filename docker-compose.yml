@@ -1,0 +1,67 @@
+
+
+services:
+  ai-assistant:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-assistant-opora
+    ports:
+      - "${HTTP_PORT:-80}:80"      # Nginx (основной порт для веб-интерфейса)
+      - "${API_PORT:-8000}:8000"   # FastAPI (для прямого доступа к API)
+    environment:
+      - HOST=127.0.0.1
+      - PORT=8000
+      - DEBUG=${DEBUG:-True}
+      - PYTHONUNBUFFERED=1
+      - GOOGLE_CREDENTIALS_FILE=credentials.json  # Файл смонтирован как credentials.json
+    env_file:
+      - .env
+    volumes:
+      # Данные приложения
+      - ./reports:/app/reports
+      - ./generated_documents:/app/generated_documents
+      - ./templates:/app/templates
+      
+      # Конфигурационные файлы
+      - ./my-sheets-ai-assistant-d59c589763f8.json:/app/credentials.json:ro
+      - ./token.pickle:/app/token.pickle:ro
+      
+      # Логи (опционально)
+      - ./logs:/var/log/supervisor
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ai-assistant-network
+
+  # Опциональный сервис для разработки (если нужен отдельный Nginx)
+  nginx-dev:
+    image: nginx:alpine
+    container_name: ai-assistant-nginx-dev
+    ports:
+      - "8080:80"
+    volumes:
+      - ./static:/usr/share/nginx/html/static:ro
+      - ./nginx-dev.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - ai-assistant
+    restart: unless-stopped
+    networks:
+      - ai-assistant-network
+    profiles:
+      - dev
+
+volumes:
+  reports:
+  generated_documents:
+  logs:
+
+networks:
+  ai-assistant-network:
+    driver: bridge
+
