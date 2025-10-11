@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Ассистент - Опора России</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta http-equiv="Last-Modified" content="0">
+    <meta http-equiv="ETag" content="0">
+    <!-- Версия: 2025-01-11-v5 - Убрана кнопка "Заявка на вступление", добавлена кнопка "Преимущества членства" - обновлено -->
     <style>
         * {
             margin: 0;
@@ -412,14 +418,24 @@
                 
                 <div class="sidebar-section">
                     <div class="sidebar-title">🏢 Опора России</div>
-                    <button class="sidebar-button" onclick="showMembershipApplication()">
-                        📝 Заявка на вступление
-                    </button>
                     <button class="sidebar-button" onclick="showMembershipBenefits()">
                         🎁 Преимущества членства
                     </button>
                     <button class="sidebar-button" onclick="showRegionalOffices()">
                         🏛️ Региональные отделения
+                    </button>
+                </div>
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">📝 Документы</div>
+                    <button class="sidebar-button" onclick="showAutofillDocuments()">
+                        🤖 Автозаполнение документов
+                    </button>
+                    <button class="sidebar-button" onclick="showTemplateManager()">
+                        📋 Управление шаблонами
+                    </button>
+                    <button class="sidebar-button" onclick="showDocumentHistory()">
+                        📚 История документов
                     </button>
                 </div>
                 
@@ -441,21 +457,21 @@
                 <div class="quick-actions">
                     <div class="actions-grid">
                         <button class="action-button" onclick="quickAction('analytics')">
-                            <div class="action-icon"></div>
+                            <div class="action-icon">📊</div>
                             <div class="action-title">Анализ тенденций</div>
                             <div class="action-description">Анализ и прогнозирование тенденций в малом и среднем бизнесе</div>
-                        </button>
-                        
-                        <button class="action-button" onclick="quickAction('membership')">
-                            <div class="action-icon">📝</div>
-                            <div class="action-title">Заявка на вступление</div>
-                            <div class="action-description">Подача заявки на вступление в Опору России</div>
                         </button>
                         
                         <button class="action-button" onclick="quickAction('legislation')">
                             <div class="action-icon">⚖️</div>
                             <div class="action-title">Мониторинг законов</div>
                             <div class="action-description">Мониторинг законодательства малого и среднего бизнеса</div>
+                        </button>
+                        
+                        <button class="action-button" onclick="quickAction('autofill')">
+                            <div class="action-icon">📝</div>
+                            <div class="action-title">Автозаполнение документов</div>
+                            <div class="action-description">Автоматическое заполнение документов по шаблонам</div>
                         </button>
                     </div>
                 </div>
@@ -479,16 +495,84 @@
     </div>
 
     <script>
+        // Защита от ошибок расширений браузера
+        (function() {
+            const originalError = console.error;
+            console.error = function(...args) {
+                const message = args.join(' ');
+                if (message.includes('message port closed') || 
+                    message.includes('message channel closed') ||
+                    message.includes('runtime.lastError')) {
+                    console.warn('Browser extension error suppressed:', message);
+                    return;
+                }
+                originalError.apply(console, args);
+            };
+        })();
+        
         const API_URL = 'http://localhost/api';  // API через Nginx на порту 80
         const USER_ID = 'user-' + Math.random().toString(36).substr(2, 9);
         
         let isTyping = false;
+        let activeRequests = new Set(); // Отслеживание активных запросов
+        
+        // Обработка ошибок порта сообщений
+        window.addEventListener('error', function(event) {
+            if (event.message && (
+                event.message.includes('message port closed') ||
+                event.message.includes('message channel closed') ||
+                event.message.includes('runtime.lastError')
+            )) {
+                console.warn('Browser extension error detected, cleaning up...');
+                cleanup();
+                event.preventDefault(); // Предотвращаем вывод ошибки в консоль
+            }
+        });
+        
+        // Обработка необработанных промисов
+        window.addEventListener('unhandledrejection', function(event) {
+            if (event.reason && event.reason.message && (
+                event.reason.message.includes('message channel closed') ||
+                event.reason.message.includes('message port closed') ||
+                event.reason.message.includes('runtime.lastError')
+            )) {
+                console.warn('Browser extension promise rejection detected, cleaning up...');
+                cleanup();
+                event.preventDefault(); // Предотвращаем вывод ошибки в консоль
+            }
+        });
+        
+        // Функция очистки ресурсов
+        function cleanup() {
+            // Отменяем все активные запросы
+            activeRequests.forEach(controller => {
+                if (controller && !controller.signal.aborted) {
+                    controller.abort();
+                }
+            });
+            activeRequests.clear();
+            
+            // Скрываем индикатор печати
+            hideTypingIndicator();
+        }
         
         // Инициализация
         document.addEventListener('DOMContentLoaded', function() {
             addMessage('👋 Добро пожаловать в AI Ассистент Опоры России!', 'bot');
-            addMessage(' Я помогу вам с анализом бизнеса, созданием документов, мониторингом законодательства и вступлением в Опору России.', 'bot');
+            addMessage(' Я помогу вам с анализом бизнеса, созданием документов и мониторингом законодательства.', 'bot');
             addMessage(' Выберите действие в боковой панели или используйте быстрые кнопки выше.', 'bot');
+        });
+        
+        // Очистка при разгрузке страницы
+        window.addEventListener('beforeunload', function() {
+            cleanup();
+        });
+        
+        // Очистка при скрытии страницы
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                cleanup();
+            }
         });
         
         function addMessage(text, sender, attachments = null) {
@@ -604,11 +688,11 @@
                 case 'analytics':
                     sendMessage('Проведите анализ тенденций в малом и среднем бизнесе');
                     break;
-                case 'membership':
-                    sendMessage('Помогите подать заявку на вступление в Опору России');
-                    break;
                 case 'legislation':
                     sendMessage('Покажите мониторинг законодательства малого и среднего бизнеса');
+                    break;
+                case 'autofill':
+                    startAutofillProcess();
                     break;
                 case 'documents':
                     sendMessage('Создайте документ с автоматическим заполнением');
@@ -629,6 +713,10 @@
             sendMessage('Предоставьте бизнес-инсайты и рекомендации');
         }
         
+        function showAutofillDocuments() {
+            startAutofillProcess();
+        }
+        
         function showDocumentCreation() {
             sendMessage('Помогите создать документ с автоматическим заполнением');
         }
@@ -641,9 +729,7 @@
             sendMessage('Покажите историю созданных документов');
         }
         
-        function showMembershipApplication() {
-            sendMessage('Помогите подать заявку на вступление в Опору России');
-        }
+        
         
         function showMembershipBenefits() {
             sendMessage('Расскажите о преимуществах членства в Опоре России');
@@ -679,6 +765,10 @@
             const sendButton = document.getElementById('send-button');
             sendButton.disabled = true;
             
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
             try {
                 showTypingIndicator();
                 
@@ -690,8 +780,13 @@
                     body: JSON.stringify({
                         user_id: USER_ID,
                         message: message
-                    })
+                    }),
+                    signal: controller.signal
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 
                 const data = await response.json();
                 hideTypingIndicator();
@@ -705,10 +800,15 @@
                 }
                 
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос был отменен');
+                    return;
+                }
                 console.error('Ошибка отправки сообщения:', error);
                 hideTypingIndicator();
                 addMessage('❌ Извините, произошла ошибка. Попробуйте позже.', 'bot');
             } finally {
+                activeRequests.delete(controller);
                 sendButton.disabled = false;
             }
         }
@@ -911,16 +1011,47 @@
                 const fieldRequirements = suggestion.required_fields;
                 let formFields = '';
                 
+                // Маппинг английских названий полей на русские
+                const fieldLabels = {
+                    'last_name': 'Фамилия',
+                    'first_name': 'Имя',
+                    'middle_name': 'Отчество',
+                    'birth_date': 'Дата рождения',
+                    'inn': 'ИНН',
+                    'region': 'Регион',
+                    'city': 'Город',
+                    'street': 'Улица',
+                    'house': 'Дом',
+                    'apartment': 'Квартира',
+                    'phone': 'Телефон',
+                    'email': 'Email',
+                    'full_name': 'ФИО',
+                    'organization': 'Организация',
+                    'position': 'Должность',
+                    'address': 'Адрес',
+                    'passport': 'Паспорт',
+                    'business_type': 'Тип бизнеса',
+                    'education': 'Образование',
+                    'work_info': 'Информация о работе',
+                    'activity_sphere': 'Сфера деятельности',
+                    'business_experience': 'Опыт в бизнесе',
+                    'public_activity_experience': 'Опыт общественной деятельности',
+                    'expertise_area': 'Область экспертизы',
+                    'elected_position': 'Выборная должность',
+                    'additional_info': 'Дополнительная информация'
+                };
+                
                 for (const [field, label] of Object.entries(fieldRequirements)) {
                     const inputType = field === 'email' ? 'email' : 
                                      field === 'phone' ? 'tel' : 
                                      field === 'birth_date' ? 'date' : 'text';
-                    const placeholder = label;
+                    const russianLabel = fieldLabels[field] || label;
+                    const placeholder = russianLabel;
                     const value = suggestion.user_data[field] || '';
                     
                     formFields += `
                         <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">${label}:</label>
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">${russianLabel}:</label>
                             <input type="${inputType}" id="${field}" placeholder="${placeholder}" value="${value}" 
                                    style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
                         </div>
@@ -1021,6 +1152,10 @@
         }
         
         async function createDocument(templateId, userData, conversationData) {
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
             try {
                 showTypingIndicator();
                 
@@ -1035,8 +1170,13 @@
                         user_data: userData,
                         conversation_data: conversationData,
                         send_email: true
-                    })
+                    }),
+                    signal: controller.signal
                 });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 
                 const data = await response.json();
                 hideTypingIndicator();
@@ -1051,9 +1191,15 @@
                 }
                 
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос создания документа был отменен');
+                    return;
+                }
                 console.error('Ошибка создания документа:', error);
                 hideTypingIndicator();
                 addMessage('❌ Ошибка создания документа. Попробуйте позже.', 'bot');
+            } finally {
+                activeRequests.delete(controller);
             }
         }
         
@@ -1064,7 +1210,7 @@
             };
             
             // Собираем все заполненные поля
-            const possibleFields = ['full_name', 'email', 'phone', 'organization', 'position', 'inn', 'address', 'passport', 'birth_date', 'business_type'];
+            const possibleFields = ['full_name', 'email', 'phone', 'organization', 'position', 'inn', 'address', 'passport', 'birth_date', 'business_type', 'last_name', 'first_name', 'middle_name', 'region', 'city', 'street', 'house', 'apartment', 'education', 'work_info', 'activity_sphere', 'business_experience', 'public_activity_experience', 'expertise_area', 'elected_position', 'additional_info'];
             possibleFields.forEach(field => {
                 const element = document.getElementById(field);
                 if (element) {
@@ -1278,6 +1424,533 @@
                 sendMessage();
             }
         }
+        // Функция для запуска процесса автозаполнения документов
+        async function startAutofillProcess() {
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
+            try {
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/interactive-autofill?user_id=${USER_ID}&message=Начать процесс автозаполнения документов`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.status === 'success') {
+                    addMessage(data.message, 'bot');
+                    
+                    // Показываем доступные шаблоны
+                    if (data.templates && data.templates.length > 0) {
+                        showTemplateSelection(data.templates);
+                    }
+                } else {
+                    addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос автозаполнения был отменен');
+                    return;
+                }
+                console.error('Ошибка запуска автозаполнения:', error);
+                hideTypingIndicator();
+                addMessage('❌ Ошибка запуска автозаполнения. Попробуйте позже.', 'bot');
+            } finally {
+                activeRequests.delete(controller);
+            }
+        }
+        
+        // Функция для отображения выбора шаблонов
+        function showTemplateSelection(templates) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+            contentDiv.style.borderLeft = '4px solid #2196f3';
+            contentDiv.style.padding = '20px';
+            contentDiv.style.borderRadius = '15px';
+            contentDiv.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.2)';
+            
+            contentDiv.innerHTML = `
+                <div style="font-size: 20px; margin-bottom: 15px;">📋 Выберите шаблон для автозаполнения:</div>
+                <div style="font-size: 14px; color: #666; margin-bottom: 20px;">
+                    Система автоматически определит, какие данные нужны для заполнения выбранного шаблона
+                </div>
+            `;
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            contentDiv.appendChild(timeDiv);
+            
+            // Создаем список шаблонов
+            const templatesDiv = document.createElement('div');
+            templatesDiv.style.marginTop = '15px';
+            
+            templates.forEach(template => {
+                const templateButton = document.createElement('button');
+                templateButton.style.display = 'block';
+                templateButton.style.width = '100%';
+                templateButton.style.margin = '8px 0';
+                templateButton.style.padding = '15px 20px';
+                templateButton.style.background = 'white';
+                templateButton.style.border = '2px solid #2196f3';
+                templateButton.style.borderRadius = '12px';
+                templateButton.style.cursor = 'pointer';
+                templateButton.style.textAlign = 'left';
+                templateButton.style.fontSize = '14px';
+                templateButton.style.transition = 'all 0.3s';
+                templateButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                
+                templateButton.innerHTML = `
+                    <div style="font-weight: 600; margin-bottom: 5px;">📄 ${template.name}</div>
+                    <div style="font-size: 12px; color: #666;">${template.description || 'Описание не указано'}</div>
+                `;
+                
+                templateButton.onclick = () => selectTemplateForAutofill(template.template_id, template.name);
+                templateButton.onmouseover = () => {
+                    templateButton.style.background = '#2196f3';
+                    templateButton.style.color = 'white';
+                    templateButton.style.transform = 'translateY(-2px)';
+                    templateButton.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
+                };
+                templateButton.onmouseout = () => {
+                    templateButton.style.background = 'white';
+                    templateButton.style.color = '#333';
+                    templateButton.style.transform = 'translateY(0)';
+                    templateButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                };
+                templatesDiv.appendChild(templateButton);
+            });
+            
+            contentDiv.appendChild(templatesDiv);
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Функция для выбора шаблона и анализа данных
+        async function selectTemplateForAutofill(templateId, templateName) {
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
+            try {
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/interactive-autofill/analyze-document?user_id=${USER_ID}&document_name=${encodeURIComponent(templateName)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.status === 'success') {
+                    addMessage(`✅ Выбран шаблон: ${templateName}`, 'bot');
+                    
+                    // Показываем анализ данных и запрашиваем недостающие
+                    showDataAnalysisAndQuestions(data);
+                } else {
+                    addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос выбора шаблона был отменен');
+                    return;
+                }
+                console.error('Ошибка выбора шаблона:', error);
+                hideTypingIndicator();
+                addMessage('❌ Ошибка выбора шаблона. Попробуйте позже.', 'bot');
+            } finally {
+                activeRequests.delete(controller);
+            }
+        }
+        
+        // Функция для отображения анализа данных и вопросов
+        function showDataAnalysisAndQuestions(analysisData) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            const completeness = analysisData.completeness_analysis || {};
+            const needsData = analysisData.needs_data !== false;
+            
+            if (needsData) {
+                contentDiv.style.background = 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)';
+                contentDiv.style.borderLeft = '4px solid #ffc107';
+            } else {
+                contentDiv.style.background = 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)';
+                contentDiv.style.borderLeft = '4px solid #28a745';
+            }
+            contentDiv.style.padding = '20px';
+            contentDiv.style.borderRadius = '15px';
+            contentDiv.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+            
+            let htmlContent = '';
+            
+            // Заголовок
+            if (needsData) {
+                htmlContent += `<div style="font-size: 20px; margin-bottom: 15px;">⚠️ Требуются дополнительные данные</div>`;
+            } else {
+                htmlContent += `<div style="font-size: 20px; margin-bottom: 15px;">✅ Готов создать документ!</div>`;
+            }
+            
+            // Статистика заполнения
+            if (completeness.completeness_score !== undefined) {
+                htmlContent += `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <div style="margin-bottom: 10px;">
+                            <strong>📊 Статистика заполнения:</strong>
+                        </div>
+                        <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #e3f2fd; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: #1976d2;">${completeness.completeness_score}%</div>
+                                <div style="font-size: 12px; color: #666;">Полнота</div>
+                            </div>
+                            <div style="flex: 1; min-width: 120px; padding: 10px; background: #fff3e0; border-radius: 8px; text-align: center;">
+                                <div style="font-size: 24px; font-weight: bold; color: #f57c00;">${completeness.confidence_score || 0}%</div>
+                                <div style="font-size: 12px; color: #666;">Уверенность</div>
+                            </div>
+                        </div>
+                        
+                        ${completeness.missing_fields && completeness.missing_fields.length > 0 ? `
+                        <div style="margin-top: 10px;">
+                            <div style="font-size: 12px; color: #666; margin-bottom: 5px;">Недостающие поля (${completeness.missing_fields.length}):</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                                ${completeness.missing_fields.map(field => `<span style="background: #f8d7da; color: #721c24; padding: 4px 8px; border-radius: 4px; font-size: 11px;">✗ ${field}</span>`).join('')}
+                            </div>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            // Предлагаемые вопросы
+            if (completeness.suggested_questions && completeness.suggested_questions.length > 0) {
+                htmlContent += `
+                    <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <strong>❓ Для заполнения недостающих данных, ответьте на вопросы:</strong>
+                        <ul style="margin: 10px 0; padding-left: 20px;">
+                            ${completeness.suggested_questions.slice(0, 5).map(q => `<li style="margin: 5px 0;">${q}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            contentDiv.innerHTML = htmlContent;
+            
+            // Добавляем время
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'message-time';
+            timeDiv.textContent = new Date().toLocaleTimeString();
+            contentDiv.appendChild(timeDiv);
+            
+            // Если нужны данные, показываем форму
+            if (analysisData.needs_data && analysisData.required_fields) {
+                const formDiv = document.createElement('div');
+                formDiv.style.marginTop = '20px';
+                formDiv.style.padding = '20px';
+                formDiv.style.background = 'white';
+                formDiv.style.border = '1px solid #e0e0e0';
+                formDiv.style.borderRadius = '10px';
+                
+                // Создаем поля формы на основе требований
+                const fieldRequirements = analysisData.required_fields;
+                let formFields = '';
+                
+                // Маппинг английских названий полей на русские
+                const fieldLabels = {
+                    'last_name': 'Фамилия',
+                    'first_name': 'Имя',
+                    'middle_name': 'Отчество',
+                    'birth_date': 'Дата рождения',
+                    'inn': 'ИНН',
+                    'region': 'Регион',
+                    'city': 'Город',
+                    'street': 'Улица',
+                    'house': 'Дом',
+                    'apartment': 'Квартира',
+                    'phone': 'Телефон',
+                    'email': 'Email',
+                    'full_name': 'ФИО',
+                    'organization': 'Организация',
+                    'position': 'Должность',
+                    'address': 'Адрес',
+                    'passport': 'Паспорт',
+                    'business_type': 'Тип бизнеса',
+                    'education': 'Образование',
+                    'work_info': 'Информация о работе',
+                    'activity_sphere': 'Сфера деятельности',
+                    'business_experience': 'Опыт в бизнесе',
+                    'public_activity_experience': 'Опыт общественной деятельности',
+                    'expertise_area': 'Область экспертизы',
+                    'elected_position': 'Выборная должность',
+                    'additional_info': 'Дополнительная информация'
+                };
+                
+                for (const [field, label] of Object.entries(fieldRequirements)) {
+                    const inputType = field === 'email' ? 'email' : 
+                                     field === 'phone' ? 'tel' : 
+                                     field === 'birth_date' ? 'date' : 'text';
+                    const russianLabel = fieldLabels[field] || label;
+                    const placeholder = russianLabel;
+                    const value = analysisData.user_data[field] || '';
+                    
+                    formFields += `
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: 600; color: #333;">${russianLabel}:</label>
+                            <input type="${inputType}" id="autofill_${field}" placeholder="${placeholder}" value="${value}" 
+                                   style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+                        </div>
+                    `;
+                }
+                
+                formDiv.innerHTML = `
+                    <h4 style="margin-bottom: 20px; color: #333; font-size: 16px;">📝 Заполните данные для создания документа:</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                        ${formFields}
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="submitAutofillData('${analysisData.template_id}')" 
+                                style="background: #28a745; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                            ✅ Создать документ
+                        </button>
+                        <button onclick="askQuestionsForAutofill('${analysisData.template_id}')" 
+                                style="background: #667eea; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                            ❓ Задать вопросы
+                        </button>
+                    </div>
+                `;
+                
+                contentDiv.appendChild(formDiv);
+            } else {
+                // Если данных достаточно, показываем кнопку создания
+                const createButton = document.createElement('button');
+                createButton.style.display = 'block';
+                createButton.style.width = '100%';
+                createButton.style.margin = '15px 0';
+                createButton.style.padding = '15px';
+                createButton.style.background = 'linear-gradient(135deg, #28a745 0%, #218838 100%)';
+                createButton.style.color = 'white';
+                createButton.style.border = 'none';
+                createButton.style.borderRadius = '10px';
+                createButton.style.cursor = 'pointer';
+                createButton.style.fontSize = '16px';
+                createButton.style.fontWeight = '600';
+                createButton.style.transition = 'all 0.3s';
+                createButton.textContent = '🚀 Создать документ';
+                createButton.onclick = () => createAutofillDocument(analysisData.template_id, analysisData.user_data);
+                createButton.onmouseover = () => {
+                    createButton.style.transform = 'translateY(-2px)';
+                    createButton.style.boxShadow = '0 6px 16px rgba(40, 167, 69, 0.4)';
+                };
+                createButton.onmouseout = () => {
+                    createButton.style.transform = 'translateY(0)';
+                    createButton.style.boxShadow = 'none';
+                };
+                contentDiv.appendChild(createButton);
+            }
+            
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // Функция для отправки данных автозаполнения
+        async function submitAutofillData(templateId) {
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
+            try {
+                // Собираем данные из формы
+                const userData = {
+                    user_id: USER_ID
+                };
+                
+                // Собираем все заполненные поля из формы
+                // Ищем все элементы с id начинающимся на "autofill_"
+                const allInputs = document.querySelectorAll('input[id^="autofill_"]');
+                allInputs.forEach(input => {
+                    if (input.value && input.value.trim()) {
+                        const fieldName = input.id.replace('autofill_', '');
+                        userData[fieldName] = input.value.trim();
+                    }
+                });
+                
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/create-document`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        template_id: templateId,
+                        user_data: userData,
+                        conversation_data: { message: 'Автозаполнение документа', response: 'Документ создается' },
+                        send_email: true
+                    }),
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.status === 'success') {
+                    addMessage(`✅ ${data.message}`, 'bot', [{
+                        url: data.download_url,
+                        filename: data.filepath.split('/').pop()
+                    }]);
+                } else {
+                    addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос отправки данных был отменен');
+                    return;
+                }
+                console.error('Ошибка создания документа:', error);
+                hideTypingIndicator();
+                addMessage('❌ Ошибка создания документа. Попробуйте позже.', 'bot');
+            } finally {
+                activeRequests.delete(controller);
+            }
+        }
+        
+        // Функция для создания документа с автозаполнением
+        async function createAutofillDocument(templateId, userData) {
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
+            try {
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/create-document`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: USER_ID,
+                        template_id: templateId,
+                        user_data: userData,
+                        conversation_data: { message: 'Автозаполнение документа', response: 'Документ создается' },
+                        send_email: true
+                    }),
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.status === 'success') {
+                    addMessage(`✅ ${data.message}`, 'bot', [{
+                        url: data.download_url,
+                        filename: data.filepath.split('/').pop()
+                    }]);
+                } else {
+                    addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос создания документа был отменен');
+                    return;
+                }
+                console.error('Ошибка создания документа:', error);
+                hideTypingIndicator();
+                addMessage('❌ Ошибка создания документа. Попробуйте позже.', 'bot');
+            } finally {
+                activeRequests.delete(controller);
+            }
+        }
+        
+        // Функция для запроса вопросов
+        async function askQuestionsForAutofill(templateId) {
+            // Создаем AbortController для отмены запроса
+            const controller = new AbortController();
+            activeRequests.add(controller);
+            
+            try {
+                showTypingIndicator();
+                
+                const response = await fetch(`${API_URL}/chat/interactive-autofill/ask-questions?user_id=${USER_ID}&document_name=${encodeURIComponent(templateId)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        current_data: {}
+                    }),
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                hideTypingIndicator();
+                
+                if (data.status === 'success') {
+                    addMessage(data.message, 'bot');
+                } else {
+                    addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+                }
+                
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Запрос вопросов был отменен');
+                    return;
+                }
+                console.error('Ошибка запроса вопросов:', error);
+                hideTypingIndicator();
+                addMessage('❌ Ошибка запроса вопросов. Попробуйте позже.', 'bot');
+            } finally {
+                activeRequests.delete(controller);
+            }
+        }
+        
         // Вспомогательная функция для отображения качества данных
         function getQualityIcon(quality) {
             const qualityMap = {

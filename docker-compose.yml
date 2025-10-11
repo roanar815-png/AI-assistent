@@ -25,7 +25,7 @@ services:
       
       # Конфигурационные файлы
       - ./my-sheets-ai-assistant-d59c589763f8.json:/app/credentials.json:ro
-      - ./token.pickle:/app/token.pickle:ro
+      - ./token.pickle:/app/token.pickle
       
       # Логи (опционально)
       - ./logs:/var/log/supervisor

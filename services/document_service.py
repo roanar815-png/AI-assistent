@@ -265,6 +265,12 @@ class DocumentService:
                     import json
                     with open(metadata_path, 'r', encoding='utf-8') as f:
                         metadata = json.load(f)
+                    
+                    # Добавляем полный путь к файлу шаблона
+                    if 'filename' in metadata:
+                        template_file_path = os.path.join(self.templates_dir, metadata['filename'])
+                        metadata['file_path'] = template_file_path
+                    
                     templates.append(metadata)
         except Exception as e:
             print(f"Ошибка получения списка шаблонов: {e}")
@@ -350,12 +356,49 @@ class DocumentService:
                 else:
                     context[key] = str(value)
             
-            # ДОБАВЛЯЕМ МАППИНГ ПОЛЕЙ для совместимости с разными шаблонами
+            # ДОБАВЛЯЕМ МАППИНГ ПОЛЕЙ для совместимости с разными шаблонами (СНАЧАЛА!)
             if 'full_name' in context and context['full_name']:
                 context['fio'] = context['full_name']  # Для шаблонов, использующих {{fio}}
                 context['name'] = context['full_name']  # Для шаблонов, использующих {{name}}
                 context['фио'] = context['full_name']  # Для шаблонов на русском
                 context['имя'] = context['full_name']  # Альтернативное поле
+            
+            # Обратный маппинг: если есть fio, но нет full_name
+            if 'fio' in context and context['fio'] and 'full_name' not in context:
+                context['full_name'] = context['fio']
+            
+            # Добавляем значения по умолчанию для незаполненных полей (ПОСЛЕ маппинга)
+            default_values = {
+                "last_name": "Не указано",
+                "first_name": "Не указано", 
+                "middle_name": "Не указано",
+                "inn": "Не указано",
+                "birth_date": "Не указано",
+                "region": "Не указано",
+                "city": "Не указано",
+                "street": "Не указано",
+                "house": "Не указано",
+                "apartment": "Не указано",
+                "phone": "Не указано",
+                "email": "Не указано",
+                "passport": "Не указано",
+                "education": "Не указано",
+                "work_info": "Не указано",
+                "activity_sphere": "Не указано",
+                "business_experience": "Не указано",
+                "public_activity_experience": "Не указано",
+                "expertise_area": "Не указано",
+                "elected_position": "Не указано",
+                "additional_info": "Не указано",
+                "date": datetime.now().strftime("%d.%m.%Y"),
+                "fio": "Не указано",  # Убираем зависимость от full_name
+                "full_name": "Не указано"
+            }
+            
+            # Добавляем значения по умолчанию для полей, которых нет в данных
+            for field, default_value in default_values.items():
+                if field not in context or not context[field] or context[field] == "":
+                    context[field] = default_value
             
             if 'organization' in context and context['organization']:
                 context['org'] = context['organization']  # Сокращенное название

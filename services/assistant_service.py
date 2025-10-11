@@ -1310,6 +1310,9 @@ class AssistantService:
         """
         field_labels = {
             "full_name": "ФИО",
+            "last_name": "Фамилия",
+            "first_name": "Имя",
+            "middle_name": "Отчество",
             "email": "Email",
             "phone": "Телефон",
             "organization": "Организация",
@@ -1318,7 +1321,20 @@ class AssistantService:
             "address": "Адрес",
             "passport": "Паспорт",
             "birth_date": "Дата рождения",
-            "business_type": "Тип бизнеса"
+            "business_type": "Тип бизнеса",
+            "region": "Регион",
+            "city": "Город",
+            "street": "Улица",
+            "house": "Дом",
+            "apartment": "Квартира",
+            "education": "Образование",
+            "work_info": "Информация о работе",
+            "activity_sphere": "Сфера деятельности",
+            "business_experience": "Опыт в бизнесе",
+            "public_activity_experience": "Опыт общественной деятельности",
+            "expertise_area": "Область экспертизы",
+            "elected_position": "Выборная должность",
+            "additional_info": "Дополнительная информация"
         }
         
         # Берем наиболее часто встречающиеся поля
@@ -1339,6 +1355,351 @@ class AssistantService:
             }
         
         return required_fields
+    
+    def _analyze_template_content(self, template_id: str) -> Dict[str, str]:
+        """
+        Анализирует содержимое конкретного шаблона и извлекает поля из плейсхолдеров
+        """
+        try:
+            from services import document_service
+            import re
+            import os
+            
+            # Получаем информацию о шаблоне
+            templates = document_service.get_templates_list()
+            template_info = None
+            
+            for template in templates:
+                if template['template_id'] == template_id:
+                    template_info = template
+                    break
+            
+            if not template_info:
+                print(f"Шаблон {template_id} не найден")
+                return self._get_default_fields_for_template(template_id)
+            
+            template_name = template_info['name']
+            template_path = template_info.get('file_path', '')
+            
+            print(f"Анализируем шаблон: {template_name} (путь: {template_path})")
+            
+            # Извлекаем плейсхолдеры из файла
+            placeholders = self._extract_placeholders_from_file(template_path)
+            
+            if placeholders:
+                print(f"Найдены плейсхолдеры: {list(placeholders.keys())}")
+                return placeholders
+            else:
+                print("Плейсхолдеры не найдены, используем анализ по названию")
+                # Fallback к анализу по названию
+                template_name_lower = template_name.lower()
+            
+            # Определяем поля на основе названия и типа шаблона
+            if 'жалоба' in template_name_lower or 'complaint' in template_name_lower:
+                return {
+                    "full_name": "ФИО заявителя",
+                    "email": "Email для связи",
+                    "phone": "Телефон",
+                    "organization": "Организация",
+                    "inn": "ИНН организации",
+                    "address": "Адрес организации",
+                    "business_type": "Вид деятельности"
+                }
+            elif 'протокол' in template_name_lower or 'protocol' in template_name_lower:
+                return {
+                    "full_name": "ФИО участника",
+                    "organization": "Организация",
+                    "position": "Должность",
+                    "email": "Email",
+                    "phone": "Телефон"
+                }
+            elif 'договор' in template_name_lower or 'contract' in template_name_lower:
+                return {
+                    "full_name": "ФИО",
+                    "organization": "Организация",
+                    "inn": "ИНН",
+                    "address": "Юридический адрес",
+                    "email": "Email",
+                    "phone": "Телефон",
+                    "position": "Должность"
+                }
+            elif 'заявка' in template_name_lower or 'application' in template_name_lower:
+                return {
+                    "full_name": "ФИО заявителя",
+                    "organization": "Название организации",
+                    "inn": "ИНН",
+                    "email": "Email",
+                    "phone": "Телефон",
+                    "business_type": "Вид деятельности",
+                    "address": "Адрес"
+                }
+            elif 'россия' in template_name_lower or 'russia' in template_name_lower:
+                # Специальные поля для документов Опоры России
+                return {
+                    "full_name": "ФИО",
+                    "email": "Email",
+                    "phone": "Телефон",
+                    "organization": "Название организации",
+                    "inn": "ИНН организации",
+                    "address": "Адрес организации",
+                    "business_type": "Вид деятельности",
+                    "position": "Должность"
+                }
+            elif 'вступление' in template_name_lower or 'membership' in template_name_lower:
+                # Поля для заявки на вступление
+                return {
+                    "full_name": "ФИО заявителя",
+                    "organization": "Название организации",
+                    "inn": "ИНН",
+                    "email": "Email",
+                    "phone": "Телефон",
+                    "business_type": "Вид деятельности",
+                    "address": "Адрес организации",
+                    "position": "Должность"
+                }
+            elif '73' in template_name_lower or 'федеральный' in template_name_lower:
+                # Поля для документов по 73-ФЗ
+                return {
+                    "full_name": "ФИО",
+                    "organization": "Организация",
+                    "inn": "ИНН",
+                    "email": "Email",
+                    "phone": "Телефон",
+                    "address": "Адрес",
+                    "business_type": "Вид деятельности"
+                }
+            else:
+                # Для неизвестных типов используем базовые поля
+                return self._get_default_fields_for_template(template_id)
+                
+        except Exception as e:
+            print(f"Ошибка анализа шаблона {template_id}: {e}")
+            return self._get_default_fields_for_template(template_id)
+    
+    def _extract_placeholders_from_file(self, file_path: str) -> Dict[str, str]:
+        """
+        Извлекает плейсхолдеры из файла шаблона
+        """
+        try:
+            import re
+            import os
+            from docx import Document
+            
+            if not os.path.exists(file_path):
+                print(f"Файл не найден: {file_path}")
+                return {}
+            
+            placeholders = {}
+            content = ""
+            
+            # Определяем тип файла
+            if file_path.lower().endswith('.docx'):
+                # Читаем DOCX файл
+                try:
+                    doc = Document(file_path)
+                    for paragraph in doc.paragraphs:
+                        content += paragraph.text + "\n"
+                    for table in doc.tables:
+                        for row in table.rows:
+                            for cell in row.cells:
+                                content += cell.text + " "
+                except Exception as e:
+                    print(f"Ошибка чтения DOCX файла: {e}")
+                    return {}
+            elif file_path.lower().endswith('.txt'):
+                # Читаем текстовый файл
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except Exception as e:
+                    print(f"Ошибка чтения TXT файла: {e}")
+                    return {}
+            else:
+                print(f"Неподдерживаемый тип файла: {file_path}")
+                return {}
+            
+            # Ищем плейсхолдеры в формате {{field_name}}
+            placeholder_pattern = r'\{\{([^}]+)\}\}'
+            matches = re.findall(placeholder_pattern, content)
+            
+            # Маппинг плейсхолдеров на человекочитаемые названия
+            field_labels = {
+                "full_name": "ФИО",
+                "name": "ФИО",
+                "фио": "ФИО",
+                "fio": "ФИО",
+                "last_name": "Фамилия",
+                "фамилия": "Фамилия",
+                "first_name": "Имя",
+                "имя": "Имя",
+                "middle_name": "Отчество",
+                "отчество": "Отчество",
+                "email": "Email",
+                "почта": "Email",
+                "mail": "Email",
+                "phone": "Телефон",
+                "телефон": "Телефон",
+                "tel": "Телефон",
+                "organization": "Организация",
+                "организация": "Организация",
+                "org": "Организация",
+                "position": "Должность",
+                "должность": "Должность",
+                "pos": "Должность",
+                "inn": "ИНН",
+                "инн": "ИНН",
+                "address": "Адрес",
+                "адрес": "Адрес",
+                "addr": "Адрес",
+                "passport": "Паспорт",
+                "паспорт": "Паспорт",
+                "pass": "Паспорт",
+                "birth_date": "Дата рождения",
+                "дата_рождения": "Дата рождения",
+                "birth": "Дата рождения",
+                "business_type": "Тип бизнеса",
+                "тип_бизнеса": "Тип бизнеса",
+                "biz_type": "Тип бизнеса",
+                "region": "Регион",
+                "регион": "Регион",
+                "city": "Город",
+                "город": "Город",
+                "street": "Улица",
+                "улица": "Улица",
+                "house": "Дом",
+                "дом": "Дом",
+                "apartment": "Квартира",
+                "квартира": "Квартира",
+                "education": "Образование",
+                "образование": "Образование",
+                "work_info": "Информация о работе",
+                "информация_о_работе": "Информация о работе",
+                "activity_sphere": "Сфера деятельности",
+                "сфера_деятельности": "Сфера деятельности",
+                "business_experience": "Опыт в бизнесе",
+                "опыт_в_бизнесе": "Опыт в бизнесе",
+                "public_activity_experience": "Опыт общественной деятельности",
+                "опыт_общественной_деятельности": "Опыт общественной деятельности",
+                "expertise_area": "Область экспертизы",
+                "область_экспертизы": "Область экспертизы",
+                "elected_position": "Выборная должность",
+                "выборная_должность": "Выборная должность",
+                "additional_info": "Дополнительная информация",
+                "дополнительная_информация": "Дополнительная информация",
+                "user_id": "ID пользователя",
+                "date": "Дата",
+                "дата": "Дата",
+                "time": "Время",
+                "время": "Время"
+            }
+            
+            # Обрабатываем найденные плейсхолдеры
+            for match in matches:
+                field_name = match.strip().lower()
+                if field_name in field_labels:
+                    placeholders[field_name] = field_labels[field_name]
+                else:
+                    # Если поле не найдено в маппинге, используем оригинальное название
+                    placeholders[field_name] = match.strip()
+            
+            print(f"Извлечено плейсхолдеров: {len(placeholders)}")
+            for field, label in placeholders.items():
+                print(f"  • {field} → {label}")
+            
+            return placeholders
+            
+        except Exception as e:
+            print(f"Ошибка извлечения плейсхолдеров: {e}")
+            return {}
+    
+    def _get_default_fields_for_template(self, template_id: str) -> Dict[str, str]:
+        """
+        Возвращает базовые поля для шаблона
+        """
+        return {
+            "full_name": "ФИО",
+            "email": "Email",
+            "phone": "Телефон",
+            "organization": "Организация"
+        }
+    
+    def _analyze_data_completeness(self, user_data: Dict, required_fields: Dict[str, str]) -> Dict:
+        """
+        Анализирует полноту данных пользователя
+        
+        Args:
+            user_data: Данные пользователя
+            required_fields: Обязательные поля
+        
+        Returns:
+            Анализ полноты данных
+        """
+        filled_fields = []
+        missing_fields = []
+        
+        for field, label in required_fields.items():
+            if user_data.get(field) and str(user_data[field]).strip():
+                filled_fields.append(label)
+            else:
+                missing_fields.append(label)
+        
+        total_fields = len(required_fields)
+        filled_count = len(filled_fields)
+        completeness_score = int((filled_count / total_fields) * 100) if total_fields > 0 else 0
+        
+        # Определяем качество данных
+        if completeness_score >= 90:
+            data_quality = "excellent"
+        elif completeness_score >= 70:
+            data_quality = "good"
+        elif completeness_score >= 50:
+            data_quality = "fair"
+        else:
+            data_quality = "poor"
+        
+        # Генерируем рекомендуемые вопросы
+        suggested_questions = []
+        for field, label in required_fields.items():
+            if not user_data.get(field) or not str(user_data[field]).strip():
+                if field == "full_name":
+                    suggested_questions.append("Как вас зовут? (ФИО в родительном падеже)")
+                elif field == "email":
+                    suggested_questions.append("Укажите ваш email адрес")
+                elif field == "phone":
+                    suggested_questions.append("Укажите ваш номер телефона")
+                elif field == "organization":
+                    suggested_questions.append("В какой организации вы работаете?")
+                elif field == "position":
+                    suggested_questions.append("Какую должность вы занимаете?")
+                elif field == "inn":
+                    suggested_questions.append("Укажите ИНН организации")
+                elif field == "address":
+                    suggested_questions.append("Укажите ваш адрес")
+                elif field == "passport":
+                    suggested_questions.append("Укажите серию и номер паспорта")
+                elif field == "birth_date":
+                    suggested_questions.append("Укажите дату рождения")
+                elif field == "business_type":
+                    suggested_questions.append("Какой тип бизнеса вы ведете?")
+        
+        # Генерируем рекомендации
+        recommendations = []
+        if completeness_score < 50:
+            recommendations.append("Рекомендуется заполнить основные поля: ФИО, email, телефон")
+        if "email" in missing_fields:
+            recommendations.append("Email необходим для отправки готового документа")
+        if "full_name" in missing_fields:
+            recommendations.append("ФИО является обязательным полем для большинства документов")
+        
+        return {
+            "completeness_score": completeness_score,
+            "confidence_score": min(completeness_score + 10, 100),  # Уверенность немного выше полноты
+            "data_quality": data_quality,
+            "filled_fields": filled_fields,
+            "missing_fields": missing_fields,
+            "suggested_questions": suggested_questions[:5],  # Максимум 5 вопросов
+            "recommendations": recommendations
+        }
     
     def _get_missing_fields(self, user_data: Dict, required_fields: Dict[str, str]) -> List[str]:
         """
@@ -1809,10 +2170,22 @@ class AssistantService:
             
             # Создаем сессию автозаполнения
             session_id = f"autofill_{user_id}_{int(datetime.now().timestamp())}"
+            
+            # Преобразуем шаблоны в правильный формат
+            formatted_templates = []
+            for template in templates:
+                formatted_templates.append({
+                    "template_id": template['template_id'],
+                    "id": template['template_id'],
+                    "name": template['name'],
+                    "description": template.get('description', ''),
+                    "category": self._get_category_from_name(template['name'])
+                })
+            
             self.autofill_sessions[session_id] = {
                 "user_id": user_id,
                 "status": "document_selection",
-                "templates": templates,
+                "templates": formatted_templates,
                 "selected_document": None,
                 "user_data": {},
                 "questions_asked": [],
@@ -1823,21 +2196,15 @@ class AssistantService:
             print(f"[DEBUG] Created session: {session_id} for user: {user_id}")
             print(f"[DEBUG] Total sessions: {len(self.autofill_sessions)}")
             
-            # Формируем список документов для выбора
-            document_list = []
-            for template in templates:
-                document_list.append({
-                    "id": template['template_id'],
-                    "name": template['name'],
-                    "description": template.get('description', ''),
-                    "category": self._get_category_from_name(template['name'])
-                })
+            # Формируем список документов для выбора (используем уже отформатированные шаблоны)
+            document_list = formatted_templates
             
             return {
                 "status": "success",
                 "session_id": session_id,
                 "message": "Выберите документ для автозаполнения:",
-                "documents": document_list,
+                "templates": document_list,
+                "documents": document_list,  # Для обратной совместимости
                 "next_step": "document_selection"
             }
             
@@ -1868,11 +2235,25 @@ class AssistantService:
                 }
             
             # Находим выбранный документ
+            print(f"[DEBUG] Ищем документ: {document_name}")
+            print(f"[DEBUG] Доступные шаблоны в сессии: {len(session['templates'])}")
+            for i, template in enumerate(session['templates']):
+                print(f"[DEBUG]   {i+1}. {template.get('name', 'N/A')} (ID: {template.get('id', 'N/A')}, template_id: {template.get('template_id', 'N/A')})")
+            
             selected_template = None
             for template in session['templates']:
                 if template['name'].lower() == document_name.lower():
                     selected_template = template
+                    print(f"[DEBUG] Найден по имени: {template['name']}")
                     break
+            
+            # Если не найден по имени, попробуем найти по ID
+            if not selected_template:
+                for template in session['templates']:
+                    if template.get('template_id') == document_name or template.get('id') == document_name:
+                        selected_template = template
+                        print(f"[DEBUG] Найден по ID: {template.get('id')}")
+                        break
             
             if not selected_template:
                 return {
@@ -1884,15 +2265,18 @@ class AssistantService:
             session['selected_document'] = selected_template
             session['status'] = 'analysis_complete'
             
-            # Анализируем документ и определяем нужные поля
-            template_analysis = self._analyze_templates_for_fields([selected_template])
-            required_fields = self._get_required_fields_for_templates(template_analysis)
+            # Анализируем конкретный шаблон и определяем нужные поля
+            required_fields = self._analyze_template_content(selected_template['template_id'])
             
             # Определяем категорию документа
             document_category = self._get_category_from_name(selected_template['name'])
             
+            # Анализируем полноту данных
+            completeness_analysis = self._analyze_data_completeness(session['user_data'], required_fields)
+            
             return {
                 "status": "success",
+                "template_id": selected_template['template_id'],
                 "document": {
                     "id": selected_template['template_id'],
                     "name": selected_template['name'],
@@ -1900,6 +2284,9 @@ class AssistantService:
                 },
                 "required_fields": required_fields,
                 "field_count": len(required_fields),
+                "user_data": session['user_data'],
+                "needs_data": completeness_analysis['completeness_score'] < 100,
+                "completeness_analysis": completeness_analysis,
                 "message": f"Документ '{selected_template['name']}' проанализирован. Требуется заполнить {len(required_fields)} полей.",
                 "next_step": "data_collection"
             }
@@ -2178,9 +2565,16 @@ class AssistantService:
         Returns:
             Сессия автозаполнения или None
         """
+        print(f"[DEBUG] Поиск сессии для пользователя: {user_id}")
+        print(f"[DEBUG] Всего сессий: {len(self.autofill_sessions)}")
+        
         for session_id, session in self.autofill_sessions.items():
+            print(f"[DEBUG] Проверяем сессию: {session_id}, user_id: {session['user_id']}, status: {session['status']}")
             if session['user_id'] == user_id and session['status'] not in ['completed', 'cancelled']:
+                print(f"[DEBUG] Найдена активная сессия: {session_id}")
                 return session
+        
+        print(f"[DEBUG] Активная сессия для пользователя {user_id} не найдена")
         return None
     
     def _generate_question_for_field(self, field: str, label: str, document_name: str) -> str:
@@ -2195,8 +2589,12 @@ class AssistantService:
         Returns:
             Текст вопроса
         """
+        # Специальные вопросы для конкретных документов
+        if 'вступление' in document_name.lower() and field == 'full_name':
+            return "Укажите ваше ФИО в родительном падеже (например: Иванова Ивана Ивановича)"
+        
         question_templates = {
-            "full_name": f"Пожалуйста, укажите ваше полное ФИО для документа '{document_name}'",
+            "full_name": f"Пожалуйста, укажите ваше полное ФИО в родительном падеже для документа '{document_name}'",
             "email": f"Укажите ваш email адрес для документа '{document_name}'",
             "phone": f"Укажите ваш номер телефона для документа '{document_name}'",
             "organization": f"Укажите название вашей организации для документа '{document_name}'",

@@ -105,3 +105,12 @@ class FinalizeAutofillRequest(BaseModel):
     user_id: str
     document_name: str
 
+
+class CreateDocumentRequest(BaseModel):
+    """Запрос на создание документа"""
+    user_id: str
+    template_id: str
+    user_data: dict
+    conversation_data: Optional[dict] = None
+    send_email: bool = False
+

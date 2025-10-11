@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     deepseek_base_url: str = "https://api.deepseek.com"
     
     # Google
-    google_credentials_file: str = "credentials.json"
-    google_sheet_id: str = ""
+    google_credentials_file: str = "my-sheets-ai-assistant-d59c589763f8.json"
+    google_sheet_id: str = ""  # НУЖНО УКАЗАТЬ ID ВАШЕЙ GOOGLE ТАБЛИЦЫ
     
     # Application
     host: str = "0.0.0.0"
