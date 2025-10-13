@@ -2,6 +2,7 @@
 API роутер для чата с ассистентом
 """
 from fastapi import APIRouter, HTTPException
+from typing import List
 from models.schemas import (
     ChatMessage, ChatResponse, 
     InteractiveAutofillRequest, AnalyzeDocumentRequest, 
@@ -9,6 +10,7 @@ from models.schemas import (
     CreateDocumentRequest
 )
 from services import assistant_service
+from integrations import openai_service, google_sheets_service
 from logger_config import get_logger, log_success, log_error, log_warning
 
 # Инициализация логгера
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 @router.post("/message", response_model=ChatResponse)
 async def send_message(message: ChatMessage):
     """
-    Отправить сообщение ассистенту
+    Отправить сообщение ассистенту (асинхронная версия)
     
     Args:
         message: Объект сообщения с user_id и текстом
@@ -28,18 +30,18 @@ async def send_message(message: ChatMessage):
     Returns:
         Ответ ассистента
     """
-    logger.info("💬 POST /api/chat/message")
+    logger.info("💬 POST /api/chat/message (ASYNC)")
     logger.info(f"   User ID: {message.user_id}")
     logger.info(f"   Message: {message.message[:100]}{'...' if len(message.message) > 100 else ''}")
     
     try:
-        logger.debug("Вызов assistant_service.process_message...")
-        response = assistant_service.process_message(
+        logger.debug("Вызов assistant_service.process_message_async...")
+        response = await assistant_service.process_message_async(
             user_id=message.user_id,
             message=message.message
         )
         
-        log_success(logger, "Сообщение обработано", 
+        log_success(logger, "Сообщение обработано асинхронно", 
                    user_id=message.user_id,
                    response_length=len(response.response) if response.response else 0)
         
@@ -47,52 +49,12 @@ async def send_message(message: ChatMessage):
         return response
         
     except Exception as e:
-        log_error(logger, f"Ошибка обработки сообщения", 
+        log_error(logger, f"Ошибка асинхронной обработки сообщения", 
                  error=e, user_id=message.user_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/history/{user_id}")
-async def get_history(user_id: str):
-    """
-    Получить историю диалога пользователя
-    
-    Args:
-        user_id: ID пользователя
-    
-    Returns:
-        История диалога
-    """
-    logger.info(f"📖 GET /api/chat/history/{user_id}")
-    try:
-        history = assistant_service.get_conversation_history(user_id)
-        log_success(logger, "История получена", user_id=user_id, 
-                   messages_count=len(history) if history else 0)
-        return {"history": history}
-    except Exception as e:
-        log_error(logger, "Ошибка получения истории", error=e, user_id=user_id)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/history/{user_id}")
-async def clear_history(user_id: str):
-    """
-    Очистить историю диалога
-    
-    Args:
-        user_id: ID пользователя
-    
-    Returns:
-        Статус операции
-    """
-    logger.info(f"🗑️ DELETE /api/chat/history/{user_id}")
-    try:
-        assistant_service.clear_conversation(user_id)
-        log_success(logger, "История очищена", user_id=user_id)
-        return {"status": "success", "message": "История очищена"}
-    except Exception as e:
-        log_error(logger, "Ошибка очистки истории", error=e, user_id=user_id)
-        raise HTTPException(status_code=500, detail=str(e))
+## История диалога отключена по требованию: удалены эндпоинты /history/{user_id}
 
 
 @router.post("/create-document")
@@ -113,10 +75,40 @@ async def create_document_from_chat(request: CreateDocumentRequest):
     logger.debug(f"   User Data keys: {list(request.user_data.keys())}")
     
     try:
+        logger.info(f"[DEBUG] api/chat.py: Вызываем create_document_from_template для user_id={request.user_id}")
         result = assistant_service.create_document_from_template(
             request.user_id, request.template_id, request.user_data, 
             request.conversation_data, request.send_email
         )
+        logger.info(f"[DEBUG] api/chat.py: create_document_from_template вернула результат: {result.get('status', 'unknown')}")
+        
+        # Сохраняем информацию о документе в Google Sheets
+        if result and result.get("status") == "success":
+            try:
+                # Получаем название шаблона
+                template_name = "Неизвестный шаблон"
+                try:
+                    templates = assistant_service.get_available_templates()
+                    template_name = next((t['name'] for t in templates if t['template_id'] == request.template_id), "Неизвестный шаблон")
+                except:
+                    pass
+                
+                google_sheets_service.save_document({
+                    "user_id": request.user_id,
+                    "full_name": request.user_data.get("full_name", ""),
+                    "email": request.user_data.get("email", ""),
+                    "document_type": "документ",
+                    "template_name": template_name,
+                    "filepath": result.get("filepath", ""),
+                    "download_url": result.get("download_url", ""),
+                    "completeness_score": 100,  # Предполагаем полные данные для прямого создания
+                    "confidence_score": 100,
+                    "data_quality": "Высокое"
+                })
+                logger.info("✅ Документ сохранен в Google Sheets")
+            except Exception as e:
+                logger.error(f"❌ Ошибка сохранения документа в Google Sheets: {e}")
+        
         log_success(logger, "Документ создан", 
                    user_id=request.user_id, template_id=request.template_id, 
                    email_sent=request.send_email)
@@ -240,4 +232,69 @@ async def finalize_autofill(user_id: str, document_name: str):
         result = assistant_service.finalize_autofill(user_id, document_name)
         return result
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/performance")
+async def get_performance_metrics():
+    """
+    Получить метрики производительности системы
+    
+    Returns:
+        Метрики производительности
+    """
+    logger.info("📊 GET /api/chat/performance")
+    try:
+        metrics = assistant_service.get_performance_metrics()
+        log_success(logger, "Метрики производительности получены", 
+                   total_requests=metrics.get("total_requests", 0),
+                   cache_hit_rate=metrics.get("cache_hit_rate", "0%"))
+        return metrics
+    except Exception as e:
+        log_error(logger, "Ошибка получения метрик производительности", error=e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/batch")
+async def process_batch_messages(messages: List[ChatMessage]):
+    """
+    Параллельная обработка нескольких сообщений
+    
+    Args:
+        messages: Список сообщений для обработки
+    
+    Returns:
+        Список ответов
+    """
+    logger.info(f"🚀 POST /api/chat/batch - {len(messages)} сообщений")
+    try:
+        # Подготавливаем запросы для параллельной обработки
+        requests = []
+        for msg in messages:
+            history = assistant_service.get_conversation_history(msg.user_id)
+            requests.append({
+                "message": msg.message,
+                "history": history
+            })
+        
+        # Параллельная обработка
+        responses = await openai_service.process_multiple_requests(requests)
+        
+        # Формируем ответы
+        results = []
+        for i, response_text in enumerate(responses):
+            results.append(ChatResponse(
+                response=response_text,
+                action="chat",
+                document_suggestion=None
+            ))
+        
+        log_success(logger, "Пакетная обработка завершена", 
+                   messages_count=len(messages),
+                   success_count=len([r for r in results if r.response]))
+        
+        return {"results": results}
+        
+    except Exception as e:
+        log_error(logger, "Ошибка пакетной обработки", error=e)
         raise HTTPException(status_code=500, detail=str(e))

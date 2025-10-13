@@ -5,21 +5,25 @@ from .schemas import (
     UserData,
     ChatMessage,
     ChatResponse,
-    ApplicationRequest,
     FeedbackData,
     EventData,
     ReportRequest,
-    DocumentTemplate
+    DocumentTemplate,
+    ComplaintData,
+    LegislationData,
+    ChatAnalyticsData
 )
 
 __all__ = [
     "UserData",
     "ChatMessage",
     "ChatResponse",
-    "ApplicationRequest",
     "FeedbackData",
     "EventData",
     "ReportRequest",
-    "DocumentTemplate"
+    "DocumentTemplate",
+    "ComplaintData",
+    "LegislationData",
+    "ChatAnalyticsData"
 ]
 

@@ -4,6 +4,8 @@ API роутер для работы с документами
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from models.schemas import DocumentTemplate
+from integrations import google_sheets_service
+from logger_config import get_logger, log_error
 from services import document_service
 from typing import Optional
 
@@ -35,11 +37,31 @@ async def generate_document(template: DocumentTemplate):
             )
         
         if filepath:
-            return {
+            result = {
                 "status": "success",
                 "filepath": filepath,
                 "download_url": f"/api/documents/download?file={filepath}"
             }
+            # Сохраняем информацию о документе в Google Sheets
+            try:
+                user_data = template.user_data or {}
+                google_sheets_service.save_document({
+                    "user_id": user_data.get("user_id", ""),
+                    "full_name": user_data.get("full_name", ""),
+                    "email": user_data.get("email", ""),
+                    "document_type": template.template_type,
+                    "template_name": template.template_type,
+                    "filepath": filepath,
+                    "download_url": result["download_url"],
+                    "completeness_score": user_data.get("completeness_score", ""),
+                    "confidence_score": user_data.get("confidence_score", ""),
+                    "data_quality": user_data.get("data_quality", ""),
+                })
+            except Exception as e:
+                # Логируем, но не падаем для пользователя
+                logger = get_logger(__name__)
+                log_error(logger, "Ошибка записи документа в Google Sheets (generate)", error=e)
+            return result
         else:
             raise HTTPException(
                 status_code=500,
@@ -176,11 +198,30 @@ async def generate_from_template(
             conversation_data
         )
         
-        return {
+        result = {
             "status": "success",
             "filepath": filepath,
             "download_url": f"/api/documents/download?file={filepath}"
         }
+        # Сохраняем информацию о документе в Google Sheets
+        try:
+            user_info = user_data or {}
+            google_sheets_service.save_document({
+                "user_id": user_info.get("user_id", ""),
+                "full_name": user_info.get("full_name", ""),
+                "email": user_info.get("email", ""),
+                "document_type": "uploaded_template",
+                "template_name": template_id,
+                "filepath": filepath,
+                "download_url": result["download_url"],
+                "completeness_score": user_info.get("completeness_score", ""),
+                "confidence_score": user_info.get("confidence_score", ""),
+                "data_quality": user_info.get("data_quality", ""),
+            })
+        except Exception as e:
+            logger = get_logger(__name__)
+            log_error(logger, "Ошибка записи документа в Google Sheets (generate_from_template)", error=e)
+        return result
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

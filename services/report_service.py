@@ -36,27 +36,6 @@ class ReportService:
                 "Отчет по пользователям"
             )
     
-    def generate_applications_report(self, format_type: str = "csv") -> str:
-        """
-        Генерировать отчет по заявкам
-        
-        Args:
-            format_type: Формат отчета
-        
-        Returns:
-            Путь к файлу отчета
-        """
-        applications = google_sheets_service.get_applications()
-        
-        if format_type == "csv":
-            return self._create_csv_report(applications, "applications_report.csv")
-        elif format_type == "pdf":
-            return self._create_pdf_report(
-                applications,
-                "applications_report.pdf",
-                "Отчет по заявкам на вступление"
-            )
-    
     def generate_feedback_report(self, format_type: str = "csv") -> str:
         """
         Генерировать отчет по обратной связи с анализом
@@ -103,14 +82,14 @@ class ReportService:
             Словарь со статистикой
         """
         users = google_sheets_service.get_all_users()
-        applications = google_sheets_service.get_applications()
         feedback = google_sheets_service.get_feedback()
+        complaints = google_sheets_service.get_complaints()
+        events = google_sheets_service.get_events()
+        legislation = google_sheets_service.get_legislation()
+        chat_analytics = google_sheets_service.get_chat_analytics()
         
         stats = {
             "total_users": len(users),
-            "total_applications": len(applications),
-            "new_applications": len([a for a in applications 
-                                    if a.get("Статус") == "Новая"]),
             "total_feedback": len(feedback),
             "questions": len([f for f in feedback 
                             if f.get("Категория") == "question"]),
@@ -118,8 +97,64 @@ class ReportService:
                              if f.get("Категория") == "complaint"]),
             "suggestions": len([f for f in feedback 
                               if f.get("Категория") == "suggestion"]),
+            "total_complaints": len(complaints),
+            "total_events": len(events),
+            "total_legislation": len(legislation),
+            "total_chat_sessions": len(chat_analytics),
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
+        
+        # Дополнительная статистика по жалобам
+        if complaints:
+            stats["complaints_by_status"] = {}
+            for complaint in complaints:
+                status = complaint.get("Статус", "Неизвестно")
+                stats["complaints_by_status"][status] = stats["complaints_by_status"].get(status, 0) + 1
+        
+        # Дополнительная статистика по мероприятиям
+        if events:
+            stats["events_by_status"] = {}
+            for event in events:
+                status = event.get("Статус", "Неизвестно")
+                stats["events_by_status"][status] = stats["events_by_status"].get(status, 0) + 1
+        
+        # Дополнительная статистика по аналитике чата
+        if chat_analytics:
+            total_messages = 0
+            total_documents = 0
+            response_times = []
+            
+            for a in chat_analytics:
+                try:
+                    messages = a.get("Количество сообщений", 0)
+                    if isinstance(messages, (int, float)):
+                        total_messages += int(messages)
+                    elif isinstance(messages, str) and messages.isdigit():
+                        total_messages += int(messages)
+                except (ValueError, TypeError):
+                    pass
+                
+                try:
+                    documents = a.get("Создано документов", 0)
+                    if isinstance(documents, (int, float)):
+                        total_documents += int(documents)
+                    elif isinstance(documents, str) and documents.isdigit():
+                        total_documents += int(documents)
+                except (ValueError, TypeError):
+                    pass
+                
+                try:
+                    response_time = a.get("Среднее время ответа (сек)", 0)
+                    if isinstance(response_time, (int, float)):
+                        response_times.append(float(response_time))
+                    elif isinstance(response_time, str):
+                        response_times.append(float(response_time))
+                except (ValueError, TypeError):
+                    pass
+            
+            stats["total_messages"] = total_messages
+            stats["total_documents_created"] = total_documents
+            stats["avg_response_time"] = sum(response_times) / len(response_times) if response_times else 0
         
         return stats
     

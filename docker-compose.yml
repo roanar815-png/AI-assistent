@@ -15,6 +15,11 @@ services:
       - DEBUG=${DEBUG:-True}
       - PYTHONUNBUFFERED=1
       - GOOGLE_CREDENTIALS_FILE=credentials.json  # Файл смонтирован как credentials.json
+      - GOOGLE_SHEET_ID=1HDohFNTAKWBTMJFo1rYv5iINeoiVJtJcdy-7SQSOPDQ  # Правильный ID таблицы
+      - PROXY_LOGIN=${PROXY_LOGIN}
+      - PROXY_PASSWORD=${PROXY_PASSWORD}
+      - PROXY_IP=${PROXY_IP}
+      - PROXY_PORT=${PROXY_PORT}
     env_file:
       - .env
     volumes:

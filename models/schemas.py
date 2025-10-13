@@ -31,18 +31,6 @@ class ChatResponse(BaseModel):
     document_suggestion: Optional[dict] = None
 
 
-class ApplicationRequest(BaseModel):
-    """Заявка на вступление в Опору России"""
-    user_id: str
-    full_name: str
-    organization: str
-    inn: str
-    email: EmailStr
-    phone: str
-    business_type: str
-    comment: Optional[str] = None
-
-
 class FeedbackData(BaseModel):
     """Обратная связь от пользователя"""
     user_id: str
@@ -61,7 +49,7 @@ class EventData(BaseModel):
 
 class ReportRequest(BaseModel):
     """Запрос на формирование отчета"""
-    report_type: str  # users, applications, faq, complaints, stats
+    report_type: str  # users, faq, complaints, stats
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     format: str = "csv"  # csv, pdf
@@ -113,4 +101,58 @@ class CreateDocumentRequest(BaseModel):
     user_data: dict
     conversation_data: Optional[dict] = None
     send_email: bool = False
+
+
+class ComplaintData(BaseModel):
+    """Данные жалобы"""
+    complaint_id: str
+    user_id: str
+    full_name: str
+    email: str
+    phone: Optional[str] = None
+    organization: Optional[str] = None
+    complaint_text: str
+    category: str = "Общая"
+    priority: str = "Средний"
+    status: str = "Новая"
+    created_at: datetime = Field(default_factory=datetime.now)
+    processed_at: Optional[datetime] = None
+
+
+class LegislationData(BaseModel):
+    """Данные о законодательстве"""
+    title: str
+    url: str
+    publication_date: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    importance: str = "Средняя"
+    added_at: datetime = Field(default_factory=datetime.now)
+
+
+class EventData(BaseModel):
+    """Данные о мероприятии"""
+    event_id: str
+    title: str
+    date: str
+    time: Optional[str] = None
+    description: str
+    location: Optional[str] = None
+    participants: List[str] = []
+    organizer: Optional[str] = None
+    status: str = "Запланировано"
+    created_at: datetime = Field(default_factory=datetime.now)
+
+
+class ChatAnalyticsData(BaseModel):
+    """Данные аналитики чата"""
+    session_id: str
+    user_id: str
+    message_count: int
+    response_time_avg: float
+    satisfaction_score: Optional[float] = None
+    topics_discussed: List[str] = []
+    documents_created: int = 0
+    session_duration: int  # в секундах
+    created_at: datetime = Field(default_factory=datetime.now)
 

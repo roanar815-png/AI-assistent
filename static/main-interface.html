@@ -434,9 +434,6 @@
                     <button class="sidebar-button" onclick="showTemplateManager()">
                         📋 Управление шаблонами
                     </button>
-                    <button class="sidebar-button" onclick="showDocumentHistory()">
-                        📚 История документов
-                    </button>
                 </div>
                 
                 <div class="sidebar-section">
@@ -449,6 +446,13 @@
                     </button>
                     <button class="sidebar-button" onclick="showComplianceCheck()">
                         ✅ Проверка соответствия
+                    </button>
+                </div>
+                
+                <div class="sidebar-section">
+                    <div class="sidebar-title">📝 Обращения</div>
+                    <button class="sidebar-button" onclick="showComplaintForm()">
+                        📋 Подать жалобу
                     </button>
                 </div>
             </div>
@@ -472,6 +476,12 @@
                             <div class="action-icon">📝</div>
                             <div class="action-title">Автозаполнение документов</div>
                             <div class="action-description">Автоматическое заполнение документов по шаблонам</div>
+                        </button>
+                        
+                        <button class="action-button" onclick="showComplaintForm()">
+                            <div class="action-icon">📋</div>
+                            <div class="action-title">Подать жалобу</div>
+                            <div class="action-description">Подача жалобы на некачественное обслуживание</div>
                         </button>
                     </div>
                 </div>
@@ -749,6 +759,25 @@
         
         function showComplianceCheck() {
             sendMessage('Проведите проверку соответствия требованиям законодательства');
+        }
+        
+        function showComplaintForm() {
+            console.log('showComplaintForm вызвана');
+            try {
+                window.open('complaint-form.html', '_blank');
+                console.log('Форма жалоб открыта');
+            } catch (error) {
+                console.error('Ошибка при открытии формы жалоб:', error);
+                alert('Ошибка при открытии формы жалоб. Попробуйте перейти по ссылке: http://localhost/complaint-form.html');
+            }
+        }
+        
+        function showComplaintStatus() {
+            sendMessage('Покажите статус моих жалоб');
+        }
+        
+        function showFeedback() {
+            sendMessage('Хочу оставить обратную связь');
         }
         
         async function sendMessage(messageText = null) {

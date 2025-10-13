@@ -10,7 +10,9 @@ from apscheduler.triggers.cron import CronTrigger
 import os
 
 from config import settings
-from api import chat, applications, reports, documents, feedback, analysis
+from api import chat, reports, documents, feedback, analysis
+from api import health as health_api
+from api import complaints, legislation, events, chat_analytics
 from services import monitoring_service
 from integrations import gmail_service, google_sheets_service
 from logger_config import get_logger, log_success, log_error, log_warning
@@ -299,11 +301,15 @@ async def log_requests(request: Request, call_next):
 
 # Подключение роутеров
 app.include_router(chat.router)
-app.include_router(applications.router)
 app.include_router(reports.router)
 app.include_router(documents.router)
 app.include_router(feedback.router)
 app.include_router(analysis.router)
+app.include_router(health_api.router)
+app.include_router(complaints.router)
+app.include_router(legislation.router)
+app.include_router(events.router)
+app.include_router(chat_analytics.router)
 
 # Статические файлы (для чат-виджета)
 if os.path.exists("static"):

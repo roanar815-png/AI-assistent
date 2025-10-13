@@ -7,6 +7,10 @@ from datetime import datetime
 from config import settings
 from logger_config import get_logger, log_success, log_error, log_warning
 import httpx
+import asyncio
+from functools import lru_cache
+import hashlib
+import time
 
 # Инициализация логгера
 logger = get_logger(__name__)
@@ -21,9 +25,14 @@ class OpenAIService:
         
         # Защита от ошибок при инициализации
         self.client = None
+        self.async_client = None
         self.model = None
+        self.response_cache = {}  # Кэш для быстрых ответов
+        self.cache_ttl = 3600  # TTL кэша в секундах (1 час)
+        self.connection_pool = None
         
         try:
+            print(f"   [DEBUG] Начинаем инициализацию OpenAI...")
             api_key = getattr(settings, 'openai_api_key', None)
             print(f"   API Key: {'ЕСТЬ' if api_key and api_key.strip() else 'НЕТ'}")
             
@@ -34,58 +43,92 @@ class OpenAIService:
             
             print(f"   API Key start: {api_key[:20]}... (first 20 chars)")
             
-            # Поддержка DeepSeek API
-            base_url = getattr(settings, 'deepseek_base_url', None)
-            print(f"   DeepSeek Base URL: {base_url if base_url and base_url.strip() else 'НЕТ (используем OpenAI)'}")
+            # Создаем HTTP клиент с тайм-аутами и прокси
+            proxy_config = None
             
-            # Создаем HTTP клиент с тайм-аутами
-            # DeepSeek может отвечать медленно, особенно при больших промптах
-            http_client = httpx.Client(
-                timeout=httpx.Timeout(
-                    timeout=90.0,   # Общий тайм-аут
-                    connect=10.0,   # Тайм-аут подключения
-                    read=90.0,      # Тайм-аут чтения ответа (основная проблема)
-                    write=10.0      # Тайм-аут записи
-                ),
-                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            # Проверяем настройки прокси
+            proxy_login = getattr(settings, 'proxy_login', None)
+            proxy_password = getattr(settings, 'proxy_password', None)
+            proxy_ip = getattr(settings, 'proxy_ip', None)
+            proxy_port = getattr(settings, 'proxy_port', None)
+            
+            print(f"   [DEBUG] Прокси настройки:")
+            print(f"   [DEBUG]   proxy_login: {proxy_login}")
+            print(f"   [DEBUG]   proxy_password: {'ЕСТЬ' if proxy_password else 'НЕТ'}")
+            print(f"   [DEBUG]   proxy_ip: {proxy_ip}")
+            print(f"   [DEBUG]   proxy_port: {proxy_port}")
+            
+            # Создаем пул соединений для оптимизации
+            connection_limits = httpx.Limits(
+                max_keepalive_connections=20,  # Увеличено для пула
+                max_connections=50,            # Увеличено для пула
+                keepalive_expiry=30.0          # Время жизни соединений
             )
             
-            if base_url and base_url.strip():
-                print(f"   [INFO] Используем DeepSeek API", flush=True)
+            timeout_config = httpx.Timeout(
+                timeout=30.0,   # Еще больше уменьшен общий тайм-аут
+                connect=3.0,    # Очень быстрое подключение
+                read=30.0,      # Уменьшен тайм-аут чтения ответа
+                write=3.0       # Очень быстрая запись
+            )
+            
+            # Создаем HTTP клиент с прокси, если настроен
+            if proxy_login and proxy_password and proxy_ip and proxy_port:
+                proxy_url = f"http://{proxy_login}:{proxy_password}@{proxy_ip}:{proxy_port}"
+                print(f"   [INFO] Используем прокси: {proxy_ip}:{proxy_port}")
+                
                 try:
-                    print(f"   [DEBUG] Создаем OpenAI клиент с base_url={base_url.strip()}", flush=True)
-                    self.client = OpenAI(
-                        api_key=api_key,
-                        base_url=base_url.strip(),
-                        http_client=http_client,
-                        timeout=90.0,  # Общий тайм-аут 90 секунд для DeepSeek
-                        max_retries=2  # Максимум 2 попытки
+                    # Синхронный клиент
+                    http_client = httpx.Client(
+                        timeout=timeout_config,
+                        limits=connection_limits,
+                        http2=False,  # Отключаем HTTP2 для избежания ошибок
+                        proxy=proxy_url
                     )
-                    print(f"   [DEBUG] Клиент создан, устанавливаем модель...", flush=True)
-                    self.model = "deepseek-chat"  # Модель DeepSeek
-                    print(f"   [SUCCESS] DeepSeek клиент создан, модель: {self.model}", flush=True)
+                    
+                    # Асинхронный клиент для параллельных запросов
+                    self.async_client = httpx.AsyncClient(
+                        timeout=timeout_config,
+                        limits=connection_limits,
+                        http2=False,
+                        proxy=proxy_url
+                    )
+                    
                 except Exception as e:
-                    print(f"   [ERROR] ОШИБКА создания DeepSeek клиента: {e}", flush=True)
-                    print(f"   [ERROR] Type: {type(e).__name__}", flush=True)
-                    import traceback
-                    traceback.print_exc()
-                    print(f"   Сервер продолжит работу, но бот НЕ БУДЕТ отвечать.", flush=True)
-                    self.client = None
+                    print(f"   [ERROR] Ошибка инициализации httpx.Client с прокси: {e}")
+                    raise
             else:
-                print(f"   [INFO] Используем OpenAI API")
-                try:
-                    self.client = OpenAI(
-                        api_key=api_key,
-                        http_client=http_client,
-                        timeout=90.0,  # Общий тайм-аут 90 секунд
-                        max_retries=2
-                    )
-                    self.model = "gpt-4o-mini"  # Модель OpenAI
-                    print(f"   [SUCCESS] OpenAI клиент создан, модель: {self.model}")
-                except Exception as e:
-                    print(f"   [ERROR] ОШИБКА создания OpenAI клиента: {e}")
-                    print(f"   Сервер продолжит работу, но бот НЕ БУДЕТ отвечать.")
-                    self.client = None
+                # Синхронный клиент
+                http_client = httpx.Client(
+                    timeout=timeout_config,
+                    limits=connection_limits,
+                    http2=False
+                )
+                
+                # Асинхронный клиент
+                self.async_client = httpx.AsyncClient(
+                    timeout=timeout_config,
+                    limits=connection_limits,
+                    http2=False
+                )
+            
+            print(f"   [INFO] Используем OpenAI API")
+            try:
+                # Создаем клиент OpenAI с настроенным HTTP клиентом
+                client_kwargs = {
+                    "api_key": api_key,
+                    "http_client": http_client,
+                    "timeout": 90.0,  # Общий тайм-аут 90 секунд
+                    "max_retries": 2
+                }
+                
+                self.client = OpenAI(**client_kwargs)
+                self.model = "gpt-4o-mini"  # Быстрая модель OpenAI
+                print(f"   [SUCCESS] OpenAI клиент создан, модель: {self.model}")
+            except Exception as e:
+                print(f"   [ERROR] ОШИБКА создания OpenAI клиента: {e}")
+                print(f"   Сервер продолжит работу, но бот НЕ БУДЕТ отвечать.")
+                self.client = None
                     
         except Exception as e:
             print(f"   [ERROR] КРИТИЧЕСКАЯ ОШИБКА инициализации OpenAI Service: {e}", flush=True)
@@ -97,6 +140,7 @@ class OpenAIService:
         # Финальная проверка
         print(f"\n[FINAL CHECK] OpenAI Service инициализация завершена:", flush=True)
         print(f"   self.client = {self.client is not None}", flush=True)
+        print(f"   self.async_client = {self.async_client is not None}", flush=True)
         print(f"   self.model = {self.model}", flush=True)
         if not self.client:
             print(f"   [WARNING] КЛИЕНТ НЕ СОЗДАН! Бот не будет отвечать!", flush=True)
@@ -177,9 +221,54 @@ class OpenAIService:
 ПОМНИ: Не генерируй текст документов - система создаст файлы автоматически!
 """
     
+    def _get_cache_key(self, message: str, conversation_history: List[Dict] = None) -> str:
+        """Генерирует ключ кэша для сообщения"""
+        # Создаем хэш из сообщения и последних 3 сообщений истории
+        history_text = ""
+        if conversation_history:
+            recent_history = conversation_history[-3:]  # Только последние 3 сообщения
+            history_text = " ".join([msg.get("content", "") for msg in recent_history])
+        
+        cache_input = f"{message.lower().strip()}:{history_text}"
+        return hashlib.md5(cache_input.encode()).hexdigest()
+    
+    def _is_cache_valid(self, cache_entry: dict) -> bool:
+        """Проверяет валидность кэша"""
+        if not cache_entry:
+            return False
+        return time.time() - cache_entry.get("timestamp", 0) < self.cache_ttl
+    
+    def _get_cached_response(self, cache_key: str) -> str:
+        """Получает кэшированный ответ"""
+        cache_entry = self.response_cache.get(cache_key)
+        if cache_entry and self._is_cache_valid(cache_entry):
+            logger.info(f"🚀 Кэш HIT для ключа: {cache_key[:8]}...")
+            return cache_entry["response"]
+        return None
+    
+    def _cache_response(self, cache_key: str, response: str):
+        """Сохраняет ответ в кэш"""
+        self.response_cache[cache_key] = {
+            "response": response,
+            "timestamp": time.time()
+        }
+        logger.debug(f"💾 Кэш SAVE для ключа: {cache_key[:8]}...")
+    
+    def _cleanup_cache(self):
+        """Очищает устаревшие записи кэша"""
+        current_time = time.time()
+        expired_keys = [
+            key for key, entry in self.response_cache.items()
+            if current_time - entry.get("timestamp", 0) > self.cache_ttl
+        ]
+        for key in expired_keys:
+            del self.response_cache[key]
+        if expired_keys:
+            logger.debug(f"🧹 Очищено {len(expired_keys)} устаревших записей кэша")
+    
     def chat(self, message: str, conversation_history: List[Dict] = None) -> str:
         """
-        Отправить сообщение в чат и получить ответ
+        Отправить сообщение в чат и получить ответ (синхронная версия)
         
         Args:
             message: Сообщение пользователя
@@ -197,6 +286,15 @@ class OpenAIService:
             log_error(logger, "OpenAI клиент не настроен! API недоступен")
             return "Извините, OpenAI/DeepSeek API не настроен. Проверьте конфигурацию сервера."
         
+        # Проверяем кэш
+        cache_key = self._get_cache_key(message, conversation_history)
+        cached_response = self._get_cached_response(cache_key)
+        if cached_response:
+            return cached_response
+        
+        # Очищаем устаревший кэш
+        self._cleanup_cache()
+        
         try:
             history_len = len(conversation_history) if conversation_history else 0
             logger.info(f"   Message length: {len(message)} chars")
@@ -205,22 +303,23 @@ class OpenAIService:
             messages = [{"role": "system", "content": self.system_prompt}]
             
             if conversation_history:
-                messages.extend(conversation_history)
+                # Ограничиваем историю для ускорения
+                recent_history = conversation_history[-6:]  # Только последние 6 сообщений
+                messages.extend(recent_history)
             
             messages.append({"role": "user", "content": message})
             
             logger.info(f"   📤 Отправка {len(messages)} сообщений к API...")
-            logger.debug(f"   Параметры: temperature=1.0, max_tokens=4000")
+            logger.debug(f"   Параметры: temperature=0.7, max_tokens=2000")
             
-            import time
             start_time = time.time()
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=1.0,  # Максимальная креативность
-                max_tokens=4000,   # Увеличено ограничение на длину ответа
-                timeout=90.0  # Явный тайм-аут 90 секунд для этого запроса
+                temperature=0.7,  # Уменьшена креативность для быстрых ответов
+                max_tokens=1000,   # Еще больше уменьшено для ускорения
+                timeout=30.0  # Еще больше уменьшен тайм-аут
             )
             
             elapsed_time = time.time() - start_time
@@ -231,6 +330,10 @@ class OpenAIService:
                        model=self.model)
             logger.debug(f"   Preview: {result[:100] if result else 'EMPTY'}...")
             
+            # Кэшируем ответ для простых вопросов
+            if len(message) < 100 and len(result) < 500:
+                self._cache_response(cache_key, result)
+            
             return result
             
         except httpx.TimeoutException as e:
@@ -240,6 +343,147 @@ class OpenAIService:
             log_error(logger, "Ошибка при обращении к OpenAI API", 
                      error=e, model=self.model)
             return f"Извините, произошла ошибка. Попробуйте позже."
+    
+    async def chat_async(self, message: str, conversation_history: List[Dict] = None) -> str:
+        """
+        Асинхронная версия отправки сообщения в чат
+        
+        Args:
+            message: Сообщение пользователя
+            conversation_history: История диалога
+        
+        Returns:
+            Ответ ассистента
+        """
+        logger.info("🤖 Асинхронный вызов OpenAI/DeepSeek API для чата")
+        logger.debug(f"   Model: {self.model}")
+        logger.debug(f"   Async Client configured: {'YES' if self.async_client else 'NO'}")
+        
+        # Проверка что асинхронный клиент настроен
+        if not self.async_client:
+            log_error(logger, "OpenAI асинхронный клиент не настроен! API недоступен")
+            return "Извините, OpenAI/DeepSeek API не настроен. Проверьте конфигурацию сервера."
+        
+        # Проверяем кэш
+        cache_key = self._get_cache_key(message, conversation_history)
+        cached_response = self._get_cached_response(cache_key)
+        if cached_response:
+            return cached_response
+        
+        # Очищаем устаревший кэш
+        self._cleanup_cache()
+        
+        try:
+            history_len = len(conversation_history) if conversation_history else 0
+            logger.info(f"   Message length: {len(message)} chars")
+            logger.info(f"   History: {history_len} messages")
+            
+            messages = [{"role": "system", "content": self.system_prompt}]
+            
+            if conversation_history:
+                # Ограничиваем историю для ускорения
+                recent_history = conversation_history[-6:]  # Только последние 6 сообщений
+                messages.extend(recent_history)
+            
+            messages.append({"role": "user", "content": message})
+            
+            logger.info(f"   📤 Асинхронная отправка {len(messages)} сообщений к API...")
+            logger.debug(f"   Параметры: temperature=0.7, max_tokens=2000")
+            
+            start_time = time.time()
+            
+            # Используем асинхронный клиент
+            response = await self.async_client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {settings.openai_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": 0.7,
+                    "max_tokens": 2000
+                }
+            )
+            
+            elapsed_time = time.time() - start_time
+            
+            if response.status_code == 200:
+                result_data = response.json()
+                result = result_data["choices"][0]["message"]["content"]
+                
+                log_success(logger, f"Асинхронный API ответил за {elapsed_time:.2f}s", 
+                           response_length=len(result) if result else 0,
+                           model=self.model)
+                logger.debug(f"   Preview: {result[:100] if result else 'EMPTY'}...")
+                
+                # Кэшируем ответ для простых вопросов
+                if len(message) < 100 and len(result) < 500:
+                    self._cache_response(cache_key, result)
+                
+                return result
+            else:
+                log_error(logger, f"Ошибка API: {response.status_code}", 
+                         response_text=response.text)
+                return "Извините, произошла ошибка при обращении к API."
+            
+        except httpx.TimeoutException as e:
+            log_error(logger, "⏱️ Тайм-аут при асинхронном обращении к API", error=e, model=self.model)
+            return "Извините, API не ответил вовремя. Попробуйте позже или упростите запрос."
+        except Exception as e:
+            log_error(logger, "Ошибка при асинхронном обращении к OpenAI API", 
+                     error=e, model=self.model)
+            return f"Извините, произошла ошибка. Попробуйте позже."
+    
+    async def process_multiple_requests(self, requests: List[Dict]) -> List[str]:
+        """
+        Параллельная обработка нескольких запросов
+        
+        Args:
+            requests: Список запросов [{"message": str, "history": List[Dict]}, ...]
+        
+        Returns:
+            Список ответов
+        """
+        logger.info(f"🚀 Параллельная обработка {len(requests)} запросов")
+        
+        if not self.async_client:
+            log_error(logger, "Асинхронный клиент не настроен!")
+            return ["Ошибка: асинхронный клиент не настроен"] * len(requests)
+        
+        # Создаем задачи для параллельного выполнения
+        tasks = []
+        for request in requests:
+            message = request.get("message", "")
+            history = request.get("history", [])
+            task = self.chat_async(message, history)
+            tasks.append(task)
+        
+        try:
+            # Выполняем все задачи параллельно
+            start_time = time.time()
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            elapsed_time = time.time() - start_time
+            
+            # Обрабатываем результаты
+            processed_results = []
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    log_error(logger, f"Ошибка в запросе {i+1}", error=result)
+                    processed_results.append(f"Ошибка при обработке запроса: {str(result)}")
+                else:
+                    processed_results.append(result)
+            
+            log_success(logger, f"Параллельная обработка завершена за {elapsed_time:.2f}s", 
+                       requests_count=len(requests),
+                       avg_time_per_request=f"{elapsed_time/len(requests):.2f}s")
+            
+            return processed_results
+            
+        except Exception as e:
+            log_error(logger, "Ошибка при параллельной обработке", error=e)
+            return [f"Ошибка параллельной обработки: {str(e)}"] * len(requests)
     
     def analyze_sme_trends(self, query: str = None) -> str:
         """
@@ -270,8 +514,8 @@ class OpenAIService:
                     {"role": "system", "content": "Ты - эксперт по малому и среднему бизнесу в России."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=1.0,  # Максимальная креативность
-                max_tokens=4000   # Увеличено ограничение
+                temperature=0.3,  # Низкая креативность для быстрых ответов
+                max_tokens=1000   # Уменьшено для ускорения
             )
             
             return response.choices[0].message.content
@@ -310,8 +554,8 @@ class OpenAIService:
                     {"role": "system", "content": "Ты - аналитик обратной связи клиентов."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=1.0,  # Максимальная креативность
-                max_tokens=4000   # Увеличено ограничение
+                temperature=0.3,  # Низкая креативность для быстрых ответов
+                max_tokens=1000   # Уменьшено для ускорения
             )
             
             return response.choices[0].message.content
@@ -647,8 +891,8 @@ class OpenAIService:
                     {"role": "system", "content": "Ты создаешь предпросмотры документов."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=1.0,  # Максимальная креативность
-                max_tokens=4000   # Увеличено ограничение
+                temperature=0.3,  # Низкая креативность для быстрых ответов
+                max_tokens=1000   # Уменьшено для ускорения
             )
 
             return response.choices[0].message.content

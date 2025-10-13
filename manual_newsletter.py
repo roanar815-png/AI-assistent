@@ -126,7 +126,7 @@ async def run_bulk_newsletter():
 - Ответами на вопросы по МСП
 
 Доступ к ассистенту:
-http://localhost:8000/static/main-interface.html
+{settings.base_url}/main-interface.html
 
 Если у вас есть вопросы или предложения, просто напишите нам!
 

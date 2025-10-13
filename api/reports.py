@@ -23,8 +23,6 @@ async def generate_report(request: ReportRequest):
     try:
         if request.report_type == "users":
             filepath = report_service.generate_users_report(request.format)
-        elif request.report_type == "applications":
-            filepath = report_service.generate_applications_report(request.format)
         elif request.report_type == "feedback":
             filepath = report_service.generate_feedback_report(request.format)
         elif request.report_type == "stats":

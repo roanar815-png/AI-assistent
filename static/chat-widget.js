@@ -8,8 +8,38 @@ class ChatWidget {
         this.userId = this.generateUserId();
         this.isOpen = false;
         
+        // Защита от ошибок расширений браузера
+        this.setupErrorHandling();
+        
         this.initElements();
         this.attachEventListeners();
+    }
+    
+    setupErrorHandling() {
+        // Подавление ошибок расширений браузера
+        const originalError = console.error;
+        console.error = (...args) => {
+            const message = args.join(' ');
+            if (message.includes('message port closed') || 
+                message.includes('message channel closed') ||
+                message.includes('runtime.lastError')) {
+                console.warn('Browser extension error suppressed:', message);
+                return;
+            }
+            originalError.apply(console, args);
+        };
+        
+        // Обработка необработанных промисов от расширений
+        window.addEventListener('unhandledrejection', (event) => {
+            if (event.reason && event.reason.message && (
+                event.reason.message.includes('message channel closed') ||
+                event.reason.message.includes('message port closed') ||
+                event.reason.message.includes('runtime.lastError')
+            )) {
+                console.warn('Browser extension promise rejection suppressed:', event.reason.message);
+                event.preventDefault();
+            }
+        });
     }
     
     initElements() {

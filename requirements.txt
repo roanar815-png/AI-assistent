@@ -20,4 +20,7 @@ docxtpl>=0.16.7
 reportlab>=4.0.0
 jinja2>=3.1.0
 websockets>=12.0
+httpx>=0.25.0
+asyncio-throttle>=1.0.2
+psutil>=5.9.0
 

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Диагностика AI Ассистента</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Диагностика AI Ассистента</h1>
+    
+    <div class="test-section">
+        <h2>1. Проверка подключения к API</h2>
+        <button onclick="testHealth()">Проверить Health Endpoint</button>
+        <button onclick="testChatAPI()">Проверить Chat API</button>
+        <div id="health-result" class="result"></div>
+        <div id="chat-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Проверка статических файлов</h2>
+        <button onclick="testStaticFiles()">Проверить статические файлы</button>
+        <div id="static-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Проверка CORS</h2>
+        <button onclick="testCORS()">Проверить CORS</button>
+        <div id="cors-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Информация о браузере</h2>
+        <div id="browser-info" class="result"></div>
+    </div>
+
+    <script>
+        // Показываем информацию о браузере
+        document.getElementById('browser-info').innerHTML = `
+            <strong>User Agent:</strong> ${navigator.userAgent}<br>
+            <strong>URL:</strong> ${window.location.href}<br>
+            <strong>Protocol:</strong> ${window.location.protocol}<br>
+            <strong>Host:</strong> ${window.location.host}
+        `;
+
+        async function testHealth() {
+            const resultDiv = document.getElementById('health-result');
+            resultDiv.innerHTML = 'Проверяем...';
+            
+            try {
+                const response = await fetch('/health');
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `<span class="success">✅ Health endpoint работает</span><br>Ответ: ${JSON.stringify(data)}`;
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ Health endpoint ошибка: ${response.status}</span>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ Ошибка подключения: ${error.message}</span>`;
+            }
+        }
+
+        async function testChatAPI() {
+            const resultDiv = document.getElementById('chat-result');
+            resultDiv.innerHTML = 'Проверяем...';
+            
+            try {
+                const response = await fetch('/api/chat/message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        user_id: 'diagnostic_test',
+                        message: 'Тестовое сообщение'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    resultDiv.innerHTML = `<span class="success">✅ Chat API работает</span><br>Ответ: ${JSON.stringify(data).substring(0, 200)}...`;
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ Chat API ошибка: ${response.status}</span>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ Ошибка Chat API: ${error.message}</span>`;
+            }
+        }
+
+        async function testStaticFiles() {
+            const resultDiv = document.getElementById('static-result');
+            resultDiv.innerHTML = 'Проверяем...';
+            
+            const files = ['/main-interface.html', '/chat-widget.js', '/chat-widget.css'];
+            let results = [];
+            
+            for (const file of files) {
+                try {
+                    const response = await fetch(file);
+                    if (response.ok) {
+                        results.push(`✅ ${file} - OK`);
+                    } else {
+                        results.push(`❌ ${file} - ${response.status}`);
+                    }
+                } catch (error) {
+                    results.push(`❌ ${file} - ${error.message}`);
+                }
+            }
+            
+            resultDiv.innerHTML = results.join('<br>');
+        }
+
+        async function testCORS() {
+            const resultDiv = document.getElementById('cors-result');
+            resultDiv.innerHTML = 'Проверяем...';
+            
+            try {
+                const response = await fetch('/api/chat/message', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Access-Control-Request-Method': 'POST',
+                        'Access-Control-Request-Headers': 'Content-Type'
+                    }
+                });
+                
+                if (response.ok) {
+                    const corsHeaders = {
+                        'Access-Control-Allow-Origin': response.headers.get('Access-Control-Allow-Origin'),
+                        'Access-Control-Allow-Methods': response.headers.get('Access-Control-Allow-Methods'),
+                        'Access-Control-Allow-Headers': response.headers.get('Access-Control-Allow-Headers')
+                    };
+                    resultDiv.innerHTML = `<span class="success">✅ CORS настроен правильно</span><br>Заголовки: ${JSON.stringify(corsHeaders)}`;
+                } else {
+                    resultDiv.innerHTML = `<span class="warning">⚠️ CORS preflight: ${response.status}</span>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="error">❌ CORS ошибка: ${error.message}</span>`;
+            }
+        }
+
+        // Автоматически запускаем базовые тесты
+        window.onload = function() {
+            testHealth();
+            testStaticFiles();
+        };
+    </script>
+</body>
+</html>

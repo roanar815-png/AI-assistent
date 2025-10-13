@@ -36,6 +36,15 @@ ENV PYTHONUNBUFFERED=1
 ENV HOST=127.0.0.1
 ENV PORT=8000
 
+# Настройки для продакшн режима (по умолчанию)
+ENV ENVIRONMENT=production
+# ENV PROXY_ENABLED=True  # Управляется через config.py
+ENV PROXY_IP=45.152.197.36
+ENV PROXY_PORT=8000
+ENV PROXY_LOGIN=wvJF4w
+ENV PROXY_PASSWORD=0C7w1U
+ENV BASE_URL=https://sandbox1.facex.pro
+ENV DEBUG=False
 # Открытие портов
 EXPOSE 80 8000
 

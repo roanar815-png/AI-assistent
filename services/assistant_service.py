@@ -3,9 +3,13 @@
 """
 from typing import Dict, List, Optional
 from datetime import datetime
+import asyncio
+import time
 from models.schemas import ChatMessage, ChatResponse, UserData
 from integrations import openai_service, google_sheets_service
+from services.opora_contacts_service import opora_contacts_service, RegionalContact
 from services.document_service import document_service
+from services.analytics_service import analytics_service
 from logger_config import get_logger, log_success, log_error, log_warning
 
 # Инициализация логгера
@@ -21,6 +25,14 @@ class AssistantService:
         """Инициализация сервиса"""
         self.conversations = {}  # Хранение истории диалогов в памяти
         self.autofill_sessions = _autofill_sessions  # Используем глобальное хранилище
+        self.response_cache = {}  # Кэш для быстрых ответов
+        self.max_history_length = 20  # Максимальная длина истории диалога
+        self.performance_metrics = {
+            "total_requests": 0,
+            "cache_hits": 0,
+            "avg_response_time": 0.0,
+            "last_cleanup": time.time()
+        }
     
     def process_message(self, user_id: str, message: str) -> ChatResponse:
         """
@@ -48,62 +60,86 @@ class AssistantService:
         
         conversation_history = self.conversations[user_id]
         
-        # Проверка на специальные команды
-        try:
-            logger.debug("Отправка запроса к OpenAI/DeepSeek API...")
-            if ("анализ мсп" in message.lower() or "прогноз мсп" in message.lower() or 
-                "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
-                logger.info("📊 Обнаружен запрос на анализ МСП")
-                response_text = openai_service.analyze_sme_trends(message)
-                action = "analysis"
-            else:
-                # Обычный диалог + попытка классифицировать намерение
-                response_text = openai_service.chat(message, conversation_history)
-                action = "chat"
-            
-            print(f"[SUCCESS] Получен ответ от AI (длина: {len(response_text)} символов)")
-            print(f"   Первые 100 символов: {response_text[:100]}...")
-            
-            if not response_text or len(response_text.strip()) == 0:
-                print(f"[WARNING] AI вернул ПУСТОЙ ответ!")
-                response_text = "Извините, не удалось получить ответ от AI. Проверьте настройки API."
+        # Проверка кэша для простых вопросов
+        cache_key = message.lower().strip()
+        if cache_key in self.response_cache:
+            logger.info("🚀 Используем кэшированный ответ")
+            response_text = self.response_cache[cache_key]
+            action = "chat"
+            user_data, intent_data = {}, {}
+        else:
+            # Проверка на специальные команды
+            try:
+                logger.debug("Отправка запроса к OpenAI/DeepSeek API...")
+                if ("анализ мсп" in message.lower() or "прогноз мсп" in message.lower() or 
+                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
+                    logger.info("📊 Обнаружен запрос на анализ МСП")
+                    response_text = openai_service.analyze_sme_trends(message)
+                    action = "analysis"
+                    user_data, intent_data = {}, {}
+                else:
+                    # ОБЪЕДИНЕННЫЙ ЗАПРОС: диалог + извлечение данных + определение намерения
+                    response_text, user_data, intent_data = openai_service.chat_with_extraction(message, conversation_history)
+                    action = "chat"
+                    
+                    # Кэшируем простые ответы
+                    if len(response_text) < 200 and not any(keyword in message.lower() for keyword in ['документ', 'заявление', 'анкета', 'заявка']):
+                        self.response_cache[cache_key] = response_text
                 
-        except Exception as e:
-            print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА OpenAI/DeepSeek API: {e}")
-            import traceback
-            traceback.print_exc()
-            response_text = f"Извините, произошла ошибка при обработке запроса: {str(e)}"
-            action = "error"
+                print(f"[SUCCESS] Получен ответ от AI (длина: {len(response_text)} символов)")
+                print(f"   Первые 100 символов: {response_text[:100]}...")
+                
+                if not response_text or len(response_text.strip()) == 0:
+                    print(f"[WARNING] AI вернул ПУСТОЙ ответ!")
+                    response_text = "Извините, не удалось получить ответ от AI. Проверьте настройки API."
+                    
+            except Exception as e:
+                print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА OpenAI/DeepSeek API: {e}")
+                import traceback
+                traceback.print_exc()
+                response_text = f"Извините, произошла ошибка при обработке запроса: {str(e)}"
+                action = "error"
+                user_data, intent_data = {}, {}
         
-        # Обновить историю
+        # Обновить историю с ограничением длины
         conversation_history.append({"role": "user", "content": message})
         conversation_history.append({"role": "assistant", "content": response_text})
         
-        # Сохранить в Google Sheets
-        google_sheets_service.save_chat_history(user_id, message, response_text)
+        # Ограничиваем длину истории для экономии памяти
+        if len(conversation_history) > self.max_history_length:
+            # Оставляем только последние сообщения
+            conversation_history[:] = conversation_history[-self.max_history_length:]
+            logger.debug(f"История диалога обрезана до {self.max_history_length} сообщений")
         
-        # Попытка извлечь данные пользователя и бизнес-намерения
-        self._extract_and_save_user_data(user_id, conversation_history)
-        self._detect_intent_and_persist(user_id, conversation_history)
+        # Сохранить в Google Sheets (асинхронно, не блокируем ответ)
+        import asyncio
+        if action == "chat" and user_data and intent_data:
+            # Используем данные из объединенного запроса
+            asyncio.create_task(self._save_extracted_data_async(user_id, message, response_text, user_data, intent_data))
+        else:
+            # Fallback к старому методу
+            asyncio.create_task(self._save_data_async(user_id, message, response_text, conversation_history))
         
         # Проверяем, является ли сообщение жалобой
         self._check_and_save_complaint(user_id, message, conversation_history)
         
-        # Проверяем, нужно ли создать документ из шаблона
-        print(f"\n{'='*60}")
-        print(f"ПРОВЕРКА СОЗДАНИЯ ДОКУМЕНТА")
-        print(f"User ID: {user_id}")
-        print(f"Message: {message[:100]}...")
-        print(f"Response: {response_text[:100]}...")
-        print(f"{'='*60}\n")
-        
-        try:
-            document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
-        except Exception as e:
-            print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation: {e}")
-            import traceback
-            traceback.print_exc()
-            document_suggestion = None
+        # Проверяем, нужно ли создать документ из шаблона (только для определенных ключевых слов)
+        document_suggestion = None
+        if any(keyword in message.lower() for keyword in ['документ', 'заявление', 'анкета', 'заявка', 'вступление']):
+            print(f"\n{'='*60}")
+            print(f"ПРОВЕРКА СОЗДАНИЯ ДОКУМЕНТА")
+            print(f"User ID: {user_id}")
+            print(f"Message: {message[:100]}...")
+            print(f"Response: {response_text[:100]}...")
+            print(f"{'='*60}\n")
+            
+            try:
+                document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
+            except Exception as e:
+                print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation: {e}")
+                import traceback
+                traceback.print_exc()
+                document_suggestion = None
         
         print(f"\n{'='*60}")
         print(f"[RESULT] document_suggestion:")
@@ -149,6 +185,322 @@ class AssistantService:
             action=action,
             document_suggestion=document_suggestion
         )
+    
+    async def process_message_async(self, user_id: str, message: str) -> ChatResponse:
+        """
+        Асинхронная обработка сообщения пользователя
+        
+        Args:
+            user_id: ID пользователя
+            message: Текст сообщения
+        
+        Returns:
+            Ответ ассистента
+        """
+        start_time = time.time()
+        self.performance_metrics["total_requests"] += 1
+        
+        logger.info("=" * 80)
+        logger.info("🤖 АСИНХРОННАЯ ОБРАБОТКА НОВОГО СООБЩЕНИЯ")
+        logger.info(f"   User ID: {user_id}")
+        logger.info(f"   Message: {message[:100]}{'...' if len(message) > 100 else ''}")
+        logger.info("=" * 80)
+        
+        # Получить или создать историю диалога
+        if user_id not in self.conversations:
+            self.conversations[user_id] = []
+            logger.debug(f"Создана новая сессия для пользователя: {user_id}")
+        else:
+            logger.debug(f"Продолжение сессии (история: {len(self.conversations[user_id])} сообщений)")
+        
+        conversation_history = self.conversations[user_id]
+        
+        # Инициализация аналитики сессии (если нужно)
+        session_id = getattr(self, '_current_session_id', None)
+        if not session_id:
+            session_id = analytics_service.start_session(user_id)
+            self._current_session_id = session_id
+            logger.debug(f"Начата новая сессия аналитики: {session_id}")
+        
+        # Проверка кэша для простых вопросов
+        cache_key = message.lower().strip()
+        if cache_key in self.response_cache:
+            logger.info("🚀 Используем кэшированный ответ (асинхронно)")
+            self.performance_metrics["cache_hits"] += 1
+            response_text = self.response_cache[cache_key]
+            action = "chat"
+            user_data, intent_data = {}, {}
+        else:
+            # Проверка на специальные команды
+            try:
+                logger.debug("Асинхронная отправка запроса к OpenAI/DeepSeek API...")
+                message_lower = message.lower()
+                if ("анализ мсп" in message_lower or "прогноз мсп" in message_lower or 
+                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
+                    logger.info("📊 Обнаружен запрос на анализ МСП (асинхронно)")
+                    response_text = openai_service.analyze_sme_trends(message)
+                    action = "analysis"
+                    user_data, intent_data = {}, {}
+                elif ("контакт" in message_lower and ("опор" in message_lower and "росси" in message_lower)) or (
+                    "региональн" in message_lower and ("опор" in message_lower and "росси" in message_lower)):
+                    logger.info("📇 Обнаружен запрос на контакты региональных отделений Опоры России")
+                    # Попытка извлечения фильтра по региону/городу из сообщения (простая эвристика)
+                    region_filter = None
+                    # Пример: "контакты по Москве", "контакты Санкт-Петербург"
+                    for token in [
+                        "москва", "москов", "санкт-петербург", "питер", "ленинград",
+                        "новосибир", "екатеринбург", "нижний новгород", "казан", "челябин",
+                        "самар", "ростов", "уфа", "краснояр", "перм", "волгоград", "воронеж",
+                        "краснодар", "саратов", "тюмень", "ижевск", "барнаул", "омск", "тольятти",
+                    ]:
+                        if token in message_lower:
+                            region_filter = token
+                            break
+
+                    contacts: list[RegionalContact] = await opora_contacts_service.search_contacts(region_filter)
+                    if not contacts:
+                        response_text = (
+                            "Не удалось найти контакты сейчас. Попробуйте указать регион/город (например: 'Москва')."
+                        )
+                        action = "chat"
+                        user_data, intent_data = {}, {}
+                    else:
+                        # Ограничим вывод, чтобы не перегружать интерфейс
+                        max_items = 20 if region_filter else 12
+                        lines = [
+                            "Контакты региональных отделений ‘Опоры России’:"
+                        ]
+                        for c in contacts[:max_items]:
+                            parts = []
+                            if c.region:
+                                parts.append(c.region)
+                            if c.city and c.city.lower() not in (c.region or "").lower():
+                                parts.append(c.city)
+                            title = " — ".join(parts) if parts else "Регион"
+                            details_parts = []
+                            if c.organization:
+                                details_parts.append(c.organization)
+                            if c.address:
+                                details_parts.append(c.address)
+                            if c.phone:
+                                details_parts.append(f"тел.: {c.phone}")
+                            if c.email:
+                                details_parts.append(f"email: {c.email}")
+                            if c.website:
+                                details_parts.append(c.website)
+                            details = "; ".join(details_parts) if details_parts else "контакты не указаны"
+                            lines.append(f"- {title}: {details}")
+
+                        if len(contacts) > max_items:
+                            lines.append(f"\nПоказаны первые {max_items} записей. Уточните регион/город для точного списка.")
+
+                        response_text = "\n".join(lines)
+                        action = "chat"
+                        user_data, intent_data = {}, {}
+                else:
+                    # Используем синхронный клиент для быстрых ответов
+                    response_text = openai_service.chat(message, conversation_history)
+                    action = "chat"
+                    user_data, intent_data = {}, {}
+                    
+                    # Кэшируем простые ответы
+                    if len(response_text) < 200 and not any(keyword in message.lower() for keyword in ['документ', 'заявление', 'анкета', 'заявка']):
+                        self.response_cache[cache_key] = response_text
+                
+                print(f"[SUCCESS] Получен асинхронный ответ от AI (длина: {len(response_text)} символов)")
+                print(f"   Первые 100 символов: {response_text[:100]}...")
+                
+                if not response_text or len(response_text.strip()) == 0:
+                    print(f"[WARNING] AI вернул ПУСТОЙ ответ!")
+                    response_text = "Извините, не удалось получить ответ от AI. Проверьте настройки API."
+                    
+            except Exception as e:
+                print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА асинхронного OpenAI/DeepSeek API: {e}")
+                import traceback
+                traceback.print_exc()
+                response_text = f"Извините, произошла ошибка при обработке запроса: {str(e)}"
+                action = "error"
+                user_data, intent_data = {}, {}
+        
+        # Обновить историю с ограничением длины
+        conversation_history.append({"role": "user", "content": message})
+        conversation_history.append({"role": "assistant", "content": response_text})
+        
+        # Ограничиваем длину истории для экономии памяти
+        if len(conversation_history) > self.max_history_length:
+            # Оставляем только последние сообщения
+            conversation_history[:] = conversation_history[-self.max_history_length:]
+            logger.debug(f"История диалога обрезана до {self.max_history_length} сообщений")
+        
+        # Асинхронное сохранение в Google Sheets (не блокируем ответ)
+        if action == "chat" and user_data and intent_data:
+            asyncio.create_task(self._save_extracted_data_async(
+                user_id, message, response_text, user_data, intent_data
+            ))
+        elif action == "chat":
+            asyncio.create_task(self._save_data_async(
+                user_id, message, response_text, conversation_history
+            ))
+        
+        # Обработка создания документов (синхронная логика, как в process_message)
+        document_suggestion = None
+        if any(keyword in message.lower() for keyword in ['документ', 'заявление', 'анкета', 'заявка', 'вступление']):
+            print(f"\n{'='*60}")
+            print(f"ПРОВЕРКА СОЗДАНИЯ ДОКУМЕНТА (ASYNC)")
+            print(f"User ID: {user_id}")
+            print(f"Message: {message[:100]}...")
+            print(f"Response: {response_text[:100]}...")
+            print(f"{'='*60}\n")
+            try:
+                document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
+            except Exception as e:
+                print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation (ASYNC): {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Обновляем метрики производительности
+        elapsed_time = time.time() - start_time
+        self.performance_metrics["avg_response_time"] = (
+            (self.performance_metrics["avg_response_time"] * (self.performance_metrics["total_requests"] - 1) + elapsed_time) 
+            / self.performance_metrics["total_requests"]
+        )
+        
+        # Периодическая очистка памяти
+        if time.time() - self.performance_metrics["last_cleanup"] > 300:  # Каждые 5 минут
+            self._cleanup_memory()
+            self.performance_metrics["last_cleanup"] = time.time()
+        
+        logger.info(f"⚡ Асинхронная обработка завершена за {elapsed_time:.2f}s")
+        
+        # Сохраняем аналитику сессии
+        if session_id:
+            topics = analytics_service.extract_topics_from_message(message)
+            analytics_service.add_message(session_id, message, response_text, elapsed_time, topics)
+            
+            # Отмечаем создание документа, если есть
+            if document_suggestion:
+                analytics_service.mark_document_created(session_id)
+        
+        return ChatResponse(
+            response=response_text,
+            action=action,
+            document_suggestion=document_suggestion
+        )
+    
+    async def _save_data_async(self, user_id: str, message: str, response_text: str, conversation_history: List[Dict]):
+        """Асинхронное сохранение данных в Google Sheets"""
+        try:
+            # Сохраняем историю чата
+            google_sheets_service.save_chat_history(user_id, message, response_text)
+            
+            # Извлекаем и сохраняем данные пользователя
+            self._extract_and_save_user_data(user_id, conversation_history)
+            self._detect_intent_and_persist(user_id, conversation_history)
+        except Exception as e:
+            logger.error(f"Ошибка асинхронного сохранения данных: {e}")
+    
+    def _cleanup_memory(self):
+        """Очистка памяти от неактивных сессий"""
+        current_time = time.time()
+        inactive_threshold = 3600  # 1 час
+        
+        # Очищаем неактивные сессии
+        inactive_users = []
+        for user_id, history in self.conversations.items():
+            if len(history) > 0:
+                last_message_time = getattr(history[-1], 'timestamp', current_time - inactive_threshold - 1)
+                if current_time - last_message_time > inactive_threshold:
+                    inactive_users.append(user_id)
+        
+        for user_id in inactive_users:
+            del self.conversations[user_id]
+            logger.debug(f"Очищена неактивная сессия пользователя: {user_id}")
+        
+        # Очищаем старые записи кэша
+        cache_keys_to_remove = []
+        for key, value in self.response_cache.items():
+            if isinstance(value, dict) and 'timestamp' in value:
+                if current_time - value['timestamp'] > 1800:  # 30 минут
+                    cache_keys_to_remove.append(key)
+        
+        for key in cache_keys_to_remove:
+            del self.response_cache[key]
+        
+        if inactive_users or cache_keys_to_remove:
+            logger.info(f"🧹 Очистка памяти: {len(inactive_users)} сессий, {len(cache_keys_to_remove)} кэш-записей")
+    
+    def get_performance_metrics(self) -> Dict:
+        """Получить метрики производительности"""
+        cache_hit_rate = 0
+        if self.performance_metrics["total_requests"] > 0:
+            cache_hit_rate = (self.performance_metrics["cache_hits"] / 
+                            self.performance_metrics["total_requests"]) * 100
+        
+        return {
+            "total_requests": self.performance_metrics["total_requests"],
+            "cache_hits": self.performance_metrics["cache_hits"],
+            "cache_hit_rate": f"{cache_hit_rate:.1f}%",
+            "avg_response_time": f"{self.performance_metrics['avg_response_time']:.2f}s",
+            "active_sessions": len(self.conversations),
+            "cache_size": len(self.response_cache),
+            "memory_usage_mb": self._get_memory_usage()
+        }
+    
+    def _get_memory_usage(self) -> float:
+        """Получить примерное использование памяти в МБ"""
+        import sys
+        
+        total_size = 0
+        for user_id, history in self.conversations.items():
+            total_size += sys.getsizeof(history)
+            for message in history:
+                total_size += sys.getsizeof(message)
+        
+        for key, value in self.response_cache.items():
+            total_size += sys.getsizeof(key) + sys.getsizeof(value)
+        
+        return total_size / (1024 * 1024)  # Конвертируем в МБ
+    
+    async def _process_document_creation_async(self, user_id: str, user_data: Dict, 
+                                             intent_data: Dict, conversation_history: List[Dict]):
+        """Асинхронная обработка создания документов"""
+        try:
+            # Здесь можно добавить логику создания документов
+            # Пока возвращаем None
+            return None
+        except Exception as e:
+            logger.error(f"Ошибка асинхронного создания документа: {e}")
+            return None
+    
+    async def _save_extracted_data_async(self, user_id: str, message: str, response_text: str, user_data: Dict, intent_data: Dict):
+        """Асинхронное сохранение уже извлеченных данных"""
+        try:
+            # Сохраняем историю чата
+            google_sheets_service.save_chat_history(user_id, message, response_text)
+            
+            # Сохраняем данные пользователя (уже извлечены)
+            if user_data and any(user_data.values()):
+                user_data['user_id'] = user_id
+                google_sheets_service.save_user_data(user_data)
+            
+            # Сохраняем намерение (уже определено)
+            if intent_data and intent_data.get("intent") and intent_data.get("intent") != "none":
+                if intent_data.get("intent") == "application":
+                    application = intent_data.get("application", {})
+                    if any(application.values()):
+                        payload = {
+                            "user_id": user_id,
+                            "full_name": application.get("full_name", ""),
+                            "email": application.get("email", ""),
+                            "phone": application.get("phone", ""),
+                            "organization": application.get("organization", ""),
+                            "inn": application.get("inn", ""),
+                            "business_type": application.get("business_type", ""),
+                            "comment": application.get("comment", "")
+                        }
+                        google_sheets_service.save_application(payload)
+        except Exception as e:
+            logger.error(f"Ошибка асинхронного сохранения извлеченных данных: {e}")
     
     def _extract_and_save_user_data(self, user_id: str, 
                                    conversation: List[Dict]):

@@ -28,10 +28,9 @@ venv/
 env/
 ENV/
 .venv/
-.env/
 
 # Environment variables and secrets
-.env
+# .env - разрешено для редактирования
 *.env
 !env.example
 
