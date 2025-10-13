@@ -11,6 +11,7 @@ from services.opora_contacts_service import opora_contacts_service, RegionalCont
 from services.document_service import document_service
 from services.analytics_service import analytics_service
 from logger_config import get_logger, log_success, log_error, log_warning
+from config import settings
 
 # Инициализация логгера
 logger = get_logger(__name__)
@@ -1401,7 +1402,7 @@ class AssistantService:
 
  **Ваш документ готов к скачиванию!**
 
-**Скачать документ:** http://localhost:8000{download_url}"""
+**Скачать документ:** {settings.base_url}{download_url}"""
                         
                         result["created_document"] = created_document
                         result["needs_data"] = False
@@ -2179,7 +2180,7 @@ class AssistantService:
                         gmail_service._initialize_service()
                     
                     # Отправляем email с ссылкой на скачивание вместо вложения
-                    download_url = f"http://localhost:8000{result['download_url']}"
+                    download_url = f"{settings.base_url}{result['download_url']}"
                     email_body = f"""
 Здравствуйте!
 

@@ -192,7 +192,7 @@ complaint_data = {
     "priority": "Высокий"
 }
 
-response = requests.post("http://localhost:8000/api/complaints/submit", json=complaint_data)
+response = requests.post("https://sandbox1.facex.pro/api/complaints/submit", json=complaint_data)
 print(response.json())
 ```
 
@@ -201,7 +201,7 @@ print(response.json())
 import requests
 
 # Общая статистика
-response = requests.get("http://localhost:8000/api/reports/statistics")
+response = requests.get("https://sandbox1.facex.pro/api/reports/statistics")
 stats = response.json()
 print(f"Всего пользователей: {stats['total_users']}")
 print(f"Всего жалоб: {stats['total_complaints']}")
@@ -214,7 +214,7 @@ import requests
 
 # Завершение сессии с оценкой
 response = requests.post(
-    "http://localhost:8000/api/chat-analytics/end-session",
+    "https://sandbox1.facex.pro/api/chat-analytics/end-session",
     params={"session_id": "session_123", "satisfaction_score": 4.5}
 )
 print(response.json())

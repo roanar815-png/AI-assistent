@@ -19,7 +19,7 @@ def test_with_real_email():
         return
     
     try:
-        url = "http://localhost:8000/api/chat/create-document"
+        url = "https://sandbox1.facex.pro/api/chat/create-document"
         
         params = {
             "user_id": "real-test-user",

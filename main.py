@@ -148,7 +148,7 @@ async def scheduled_bulk_newsletter():
 - Ответами на вопросы по МСП
 
 🌐 Доступ к ассистенту:
-http://localhost:8000/static/main-interface.html
+https://sandbox1.facex.pro/static/main-interface.html
 
 Если у вас есть вопросы или предложения, просто напишите нам!
 
@@ -311,9 +311,9 @@ app.include_router(legislation.router)
 app.include_router(events.router)
 app.include_router(chat_analytics.router)
 
-# Статические файлы (для чат-виджета)
-if os.path.exists("static"):
-    app.mount("/static", StaticFiles(directory="static"), name="static")
+# Статические файлы обрабатываются Nginx
+# if os.path.exists("static"):
+#     app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/")
