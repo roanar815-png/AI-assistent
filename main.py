@@ -148,7 +148,7 @@ async def scheduled_bulk_newsletter():
 - Ответами на вопросы по МСП
 
 🌐 Доступ к ассистенту:
-https://sandbox1.facex.pro/static/main-interface.html
+{settings.base_url}/static/main-interface.html
 
 Если у вас есть вопросы или предложения, просто напишите нам!
 

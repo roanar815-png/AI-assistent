@@ -520,7 +520,7 @@
             };
         })();
         
-        const API_URL = 'https://sandbox1.facex.pro/api';  // API через Nginx на порту 80
+        const API_URL = window.location.origin + '/api';  // Динамический API URL
         const USER_ID = 'user-' + Math.random().toString(36).substr(2, 9);
         
         let isTyping = false;
@@ -768,7 +768,7 @@
                 console.log('Форма жалоб открыта');
             } catch (error) {
                 console.error('Ошибка при открытии формы жалоб:', error);
-                alert('Ошибка при открытии формы жалоб. Попробуйте перейти по ссылке: https://sandbox1.facex.pro/complaint-form.html');
+                alert('Ошибка при открытии формы жалоб. Попробуйте перейти по ссылке: ' + window.location.origin + '/complaint-form.html');
             }
         }
         
@@ -891,7 +891,7 @@
                     </div>
                     ` : ''}
                     
-                    <a href="https://sandbox1.facex.pro${suggestion.created_document.download_url}" 
+                    <a href="${window.location.origin}${suggestion.created_document.download_url}" 
                        style="display: block; background: linear-gradient(135deg, #28a745 0%, #218838 100%); 
                               color: white; text-decoration: none; padding: 15px 25px; 
                               border-radius: 10px; text-align: center; margin-top: 15px;

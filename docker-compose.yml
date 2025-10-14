@@ -12,7 +12,9 @@ services:
     environment:
       - HOST=127.0.0.1
       - PORT=8000
+      - ENVIRONMENT=${ENVIRONMENT:-local}
       - DEBUG=${DEBUG:-True}
+      - BASE_URL=${BASE_URL:-http://localhost}
       - PYTHONUNBUFFERED=1
       - GOOGLE_CREDENTIALS_FILE=credentials.json  # Файл смонтирован как credentials.json
       - GOOGLE_SHEET_ID=1HDohFNTAKWBTMJFo1rYv5iINeoiVJtJcdy-7SQSOPDQ  # Правильный ID таблицы

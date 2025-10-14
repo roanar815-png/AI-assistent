@@ -4,7 +4,7 @@
 
 class ChatWidget {
     constructor() {
-        this.apiUrl = 'https://sandbox1.facex.pro/api';  // API через Nginx на порту 80
+        this.apiUrl = window.location.origin + '/api';  // Динамический API URL
         this.userId = this.generateUserId();
         this.isOpen = false;
         
@@ -239,7 +239,7 @@ class ChatWidget {
                 <div style="text-align: center;">
                     <h3 style="margin: 0 0 10px 0; color: #155724; font-size: 18px;">✅ Документ готов!</h3>
                     <p style="margin: 0 0 15px 0; color: #155724;">Ваш документ успешно создан и готов к скачиванию.</p>
-                    <a href="https://sandbox1.facex.pro${suggestion.created_document.download_url}" 
+                    <a href="${window.location.origin}${suggestion.created_document.download_url}" 
                        style="display: inline-block; background: linear-gradient(135deg, #28a745 0%, #218838 100%); 
                               color: white; text-decoration: none; padding: 15px 25px; 
                               border-radius: 10px; text-align: center; margin-top: 15px;

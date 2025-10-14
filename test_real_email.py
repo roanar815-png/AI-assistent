@@ -2,6 +2,7 @@
 """
 Тест с реальным email адресом
 """
+import os
 import requests
 import json
 
@@ -19,7 +20,10 @@ def test_with_real_email():
         return
     
     try:
-        url = "https://sandbox1.facex.pro/api/chat/create-document"
+        # Формируем адрес API из переменной окружения BASE_URL
+        base_url = os.getenv("BASE_URL", "http://localhost:8000")
+        api_url = f"{base_url.rstrip('/')}" + "/api"
+        url = f"{api_url}/chat/create-document"
         
         params = {
             "user_id": "real-test-user",

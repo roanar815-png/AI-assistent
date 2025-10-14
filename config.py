@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Настройки приложения"""
     
     # Environment mode: 'local' or 'production'
-    environment: str = "production"  # По умолчанию продакшн режим
+    environment: str = os.getenv("ENVIRONMENT", "local")  # По умолчанию локальный режим
     
     # OpenAI / DeepSeek (секреты берутся из переменных окружения)
     openai_api_key: str = ""
@@ -43,8 +43,9 @@ class Settings(BaseSettings):
     # Email
     gmail_user: str = ""
     
-    # Base URL for download links
-    base_url: str = "https://sandbox1.facex.pro"
+    # Base URL for download links (используется для абсолютных ссылок в email и UI)
+    # Берется из переменной окружения BASE_URL, по умолчанию localhost
+    base_url: str = os.getenv("BASE_URL", "http://localhost")
     
     class Config:
         env_file = ".env"
@@ -53,18 +54,6 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Автоматическое переключение настроек в зависимости от режима
-if settings.environment == "local":
-    # ЛОКАЛЬНЫЙ РЕЖИМ: http://localhost/main-interface.html
-    # Прокси ВСЕГДА включен для работы с OpenAI API
-    settings.proxy_enabled = True
-    settings.base_url = "http://localhost"
-    settings.debug = True
-    print(f"ЛОКАЛЬНЫЙ РЕЖИМ: {settings.base_url}/main-interface.html (с прокси для API)")
-else:  # production
-    # ПРОДАКШН РЕЖИМ: https://sandbox1.facex.pro
-    settings.proxy_enabled = True
-    settings.base_url = "https://sandbox1.facex.pro"
-    settings.debug = False
-    print(f"ПРОДАКШН РЕЖИМ: {settings.base_url}")
+# Логируем активные настройки окружения и базовый адрес
+print(f"ENVIRONMENT={settings.environment}; BASE_URL={settings.base_url}; DEBUG={settings.debug}")
 
