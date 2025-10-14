@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     
     # Google
     google_credentials_file: str = "my-sheets-ai-assistant-d59c589763f8.json"
-    google_sheet_id: str = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"  # ID Google таблицы
+    google_sheet_id: str = os.getenv("GOOGLE_SHEET_ID", "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")  # ID Google таблицы
     
     # Application
     host: str = "0.0.0.0"

@@ -117,11 +117,11 @@ generated_documents/
 reports/
 
 # Credentials (will be mounted as volume)
-*.json
 *.pickle
 token.pickle
 credentials.json
-my-sheets-ai-assistant-*.json
+# Allow my-sheets credentials file
+!my-sheets-ai-assistant-*.json
 
 # Large files
 *.zip
