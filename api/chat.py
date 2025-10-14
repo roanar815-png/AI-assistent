@@ -36,10 +36,12 @@ async def send_message(message: ChatMessage):
     
     try:
         logger.debug("Вызов assistant_service.process_message_async...")
+        print(f"[API DEBUG] Обрабатываем сообщение: {message.message}")
         response = await assistant_service.process_message_async(
             user_id=message.user_id,
             message=message.message
         )
+        print(f"[API DEBUG] Получен ответ с действием: {response.action}")
         
         log_success(logger, "Сообщение обработано асинхронно", 
                    user_id=message.user_id,
@@ -243,7 +245,7 @@ async def get_performance_metrics():
     Returns:
         Метрики производительности
     """
-    logger.info("📊 GET /api/chat/performance")
+    logger.info("СТАТИСТИКА: GET /api/chat/performance")
     try:
         metrics = assistant_service.get_performance_metrics()
         log_success(logger, "Метрики производительности получены", 

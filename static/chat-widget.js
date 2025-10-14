@@ -116,6 +116,11 @@ class ChatWidget {
             // Отображаем ответ бота
             this.addMessage(data.response, 'bot');
             
+            // Обрабатываем специальные действия
+            if (data.action === 'open_templates') {
+                this.openTemplatesWindow();
+            }
+            
             // Показываем предложение документа если есть
             if (data.document_suggestion && data.document_suggestion.suggested) {
                 this.showDocumentSuggestion(data.document_suggestion);
@@ -360,6 +365,184 @@ class ChatWidget {
         }
         
         return userId;
+    }
+    
+    openTemplatesWindow() {
+        // Открываем окно с шаблонами, используя ту же логику, что и в main-interface.html
+        if (typeof startAutofillProcess === 'function') {
+            // Если мы в main-interface.html, вызываем существующую функцию
+            startAutofillProcess();
+        } else {
+            // Если мы в chat-widget, создаем собственное окно с шаблонами
+            this.showTemplateSelection();
+        }
+    }
+    
+    async showTemplateSelection() {
+        try {
+            // Получаем список шаблонов из API
+            const response = await fetch(`${this.apiUrl}/documents/templates/list`);
+            const templates = await response.json();
+            
+            if (templates && templates.length > 0) {
+                // Создаем сообщение с выбором шаблонов
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message bot-message';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                contentDiv.style.background = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+                contentDiv.style.borderLeft = '4px solid #2196f3';
+                contentDiv.style.padding = '20px';
+                contentDiv.style.borderRadius = '15px';
+                contentDiv.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.2)';
+                
+                contentDiv.innerHTML = `
+                    <div style="font-size: 18px; margin-bottom: 15px;">📋 Выберите шаблон для автозаполнения:</div>
+                    <div style="font-size: 14px; color: #666; margin-bottom: 20px;">
+                        Система автоматически определит, какие данные нужны для заполнения выбранного шаблона
+                    </div>
+                `;
+                
+                // Создаем список шаблонов
+                const templatesDiv = document.createElement('div');
+                templatesDiv.style.marginTop = '15px';
+                
+                templates.forEach(template => {
+                    const templateButton = document.createElement('button');
+                    templateButton.style.display = 'block';
+                    templateButton.style.width = '100%';
+                    templateButton.style.margin = '8px 0';
+                    templateButton.style.padding = '15px 20px';
+                    templateButton.style.background = 'white';
+                    templateButton.style.border = '2px solid #2196f3';
+                    templateButton.style.borderRadius = '12px';
+                    templateButton.style.cursor = 'pointer';
+                    templateButton.style.textAlign = 'left';
+                    templateButton.style.fontSize = '14px';
+                    templateButton.style.transition = 'all 0.3s';
+                    templateButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    
+                    templateButton.innerHTML = `
+                        <div style="font-weight: 600; margin-bottom: 5px;">📄 ${template.name}</div>
+                        <div style="font-size: 12px; color: #666;">${template.description || 'Описание не указано'}</div>
+                    `;
+                    
+                    templateButton.onclick = () => this.selectTemplateForAutofill(template.template_id, template.name);
+                    templateButton.onmouseover = () => {
+                        templateButton.style.background = '#2196f3';
+                        templateButton.style.color = 'white';
+                        templateButton.style.transform = 'translateY(-2px)';
+                        templateButton.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
+                    };
+                    templateButton.onmouseout = () => {
+                        templateButton.style.background = 'white';
+                        templateButton.style.color = '#333';
+                        templateButton.style.transform = 'translateY(0)';
+                        templateButton.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    };
+                    templatesDiv.appendChild(templateButton);
+                });
+                
+                contentDiv.appendChild(templatesDiv);
+                messageDiv.appendChild(contentDiv);
+                this.chatMessages.appendChild(messageDiv);
+                this.scrollToBottom();
+                
+            } else {
+                this.addMessage('❌ Не удалось загрузить список шаблонов. Попробуйте позже.', 'bot');
+            }
+            
+        } catch (error) {
+            console.error('Ошибка загрузки шаблонов:', error);
+            this.addMessage('❌ Ошибка загрузки шаблонов. Попробуйте позже.', 'bot');
+        }
+    }
+    
+    async selectTemplateForAutofill(templateId, templateName) {
+        try {
+            this.showTypingIndicator();
+            
+            const response = await fetch(`${this.apiUrl}/chat/interactive-autofill/analyze-document?user_id=${this.userId}&document_name=${encodeURIComponent(templateName)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const data = await response.json();
+            this.hideTypingIndicator();
+            
+            if (data.status === 'success') {
+                this.addMessage(`✅ Выбран шаблон: ${templateName}`, 'bot');
+                this.showDataAnalysisAndQuestions(data);
+            } else {
+                this.addMessage(`❌ Ошибка: ${data.message}`, 'bot');
+            }
+            
+        } catch (error) {
+            console.error('Ошибка выбора шаблона:', error);
+            this.hideTypingIndicator();
+            this.addMessage('❌ Ошибка выбора шаблона. Попробуйте позже.', 'bot');
+        }
+    }
+    
+    showDataAnalysisAndQuestions(analysisData) {
+        // Создаем сообщение с анализом данных (упрощенная версия)
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message bot-message';
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.style.background = 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)';
+        contentDiv.style.borderLeft = '4px solid #28a745';
+        contentDiv.style.padding = '20px';
+        contentDiv.style.borderRadius = '15px';
+        contentDiv.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.2)';
+        
+        const completeness = analysisData.completeness_analysis || {};
+        const needsData = analysisData.needs_data !== false;
+        
+        let htmlContent = '';
+        
+        if (needsData) {
+            htmlContent += `<div style="font-size: 18px; margin-bottom: 15px;">⚠️ Требуются дополнительные данные</div>`;
+        } else {
+            htmlContent += `<div style="font-size: 18px; margin-bottom: 15px;">✅ Готов создать документ!</div>`;
+        }
+        
+        if (completeness.completeness_score !== undefined) {
+            htmlContent += `
+                <div style="background: white; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                    <div style="margin-bottom: 10px;"><strong>📊 Статистика заполнения:</strong></div>
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 120px; padding: 10px; background: #e3f2fd; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #1976d2;">${completeness.completeness_score}%</div>
+                            <div style="font-size: 12px; color: #666;">Полнота</div>
+                        </div>
+                        <div style="flex: 1; min-width: 120px; padding: 10px; background: #fff3e0; border-radius: 8px; text-align: center;">
+                            <div style="font-size: 24px; font-weight: bold; color: #f57c00;">${completeness.confidence_score || 0}%</div>
+                            <div style="font-size: 12px; color: #666;">Уверенность</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Добавляем кнопку создания документа
+        htmlContent += `
+            <button onclick="window.chatWidget.createDocument('${analysisData.template_id}', ${JSON.stringify(analysisData.user_data || {}).replace(/"/g, '&quot;')}, { message: 'Создание документа', response: 'Документ создается' })" 
+                    style="display: block; width: 100%; margin: 15px 0; padding: 15px; background: linear-gradient(135deg, #28a745 0%, #218838 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.3s;"
+                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(40, 167, 69, 0.4)';"
+                    onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+                🚀 Создать документ
+            </button>
+        `;
+        
+        contentDiv.innerHTML = htmlContent;
+        messageDiv.appendChild(contentDiv);
+        this.chatMessages.appendChild(messageDiv);
+        this.scrollToBottom();
     }
 }
 

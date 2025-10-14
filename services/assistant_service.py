@@ -27,13 +27,30 @@ class AssistantService:
         self.conversations = {}  # Хранение истории диалогов в памяти
         self.autofill_sessions = _autofill_sessions  # Используем глобальное хранилище
         self.response_cache = {}  # Кэш для быстрых ответов
-        self.max_history_length = 20  # Максимальная длина истории диалога
+        self.cache_ttl = 1800  # 30 минут TTL для кэша
+        self.cache_timestamps = {}  # Временные метки кэша
+        self.max_history_length = 10  # Уменьшена максимальная длина истории диалога
         self.performance_metrics = {
             "total_requests": 0,
             "cache_hits": 0,
             "avg_response_time": 0.0,
             "last_cleanup": time.time()
         }
+    
+    def _cleanup_expired_cache(self):
+        """Очищает устаревшие записи кэша"""
+        current_time = time.time()
+        expired_keys = [
+            key for key, timestamp in self.cache_timestamps.items()
+            if current_time - timestamp > self.cache_ttl
+        ]
+        
+        for key in expired_keys:
+            self.response_cache.pop(key, None)
+            self.cache_timestamps.pop(key, None)
+        
+        if expired_keys:
+            logger.debug(f"🧹 Очищено {len(expired_keys)} устаревших записей кэша")
     
     def process_message(self, user_id: str, message: str) -> ChatResponse:
         """
@@ -63,7 +80,15 @@ class AssistantService:
         
         # Проверка кэша для простых вопросов
         cache_key = message.lower().strip()
-        if cache_key in self.response_cache:
+        current_time = time.time()
+        
+        # Очищаем устаревший кэш
+        self._cleanup_expired_cache()
+        
+        # Проверяем валидность кэша
+        if (cache_key in self.response_cache and 
+            cache_key in self.cache_timestamps and
+            current_time - self.cache_timestamps[cache_key] < self.cache_ttl):
             logger.info("🚀 Используем кэшированный ответ")
             response_text = self.response_cache[cache_key]
             action = "chat"
@@ -73,19 +98,56 @@ class AssistantService:
             try:
                 logger.debug("Отправка запроса к OpenAI/DeepSeek API...")
                 if ("анализ мсп" in message.lower() or "прогноз мсп" in message.lower() or 
-                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
-                    logger.info("📊 Обнаружен запрос на анализ МСП")
+                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower() or
+                    "тенденции" in message.lower() or "тренды" in message.lower() or
+                    "анализ бизнеса" in message.lower() or "развитие бизнеса" in message.lower()):
+                    logger.info("АНАЛИЗ: Обнаружен запрос на анализ МСП")
                     response_text = openai_service.analyze_sme_trends(message)
                     action = "analysis"
                     user_data, intent_data = {}, {}
+                elif any(keyword in message.lower() for keyword in [
+                    "заполнить документ", "помочь заполнить", "автозаполнение", "заполнить заявление",
+                    "заполнить анкету", "помогите заполнить", "заполнить шаблон", 
+                    "оформить документ", "помочь с документом", "заполнить форму"
+                ]):
+                    logger.info("📝 Обнаружен запрос на заполнение документа")
+                    response_text = "Отлично! Я помогу вам заполнить документ. Сейчас откроется окно с доступными шаблонами для автозаполнения."
+                    action = "open_templates"
+                    user_data, intent_data = {}, {}
                 else:
-                    # ОБЪЕДИНЕННЫЙ ЗАПРОС: диалог + извлечение данных + определение намерения
-                    response_text, user_data, intent_data = openai_service.chat_with_extraction(message, conversation_history)
-                    action = "chat"
+                    # Проверяем, является ли это простым приветствием или представлением
+                    simple_greetings = [
+                        "меня зовут", "я", "привет", "здравствуйте", "добрый день", 
+                        "добрый вечер", "доброе утро", "как дела", "что нового",
+                        "здравствуй", "приветствую", "добро пожаловать"
+                    ]
+                    
+                    # Более точная проверка для простых представлений
+                    message_lower = message.lower().strip()
+                    is_simple_greeting = (
+                        any(greeting in message_lower for greeting in simple_greetings) and
+                        len(message.split()) <= 5 and
+                        not any(doc_keyword in message_lower for doc_keyword in [
+                            "документ", "заявление", "анкета", "заявка", "создать", 
+                            "оформить", "подать", "заполнить", "шаблон"
+                        ])
+                    )
+                    
+                    if is_simple_greeting:
+                        # Для простых приветствий используем обычный чат без извлечения данных
+                        response_text = openai_service.chat(message, conversation_history)
+                        user_data, intent_data = {}, {}
+                        action = "chat"
+                    else:
+                        # ОБЪЕДИНЕННЫЙ ЗАПРОС: диалог + извлечение данных + определение намерения
+                        print(f"[DEBUG] ОБЫЧНЫЙ ЗАПРОС ЧЕРЕЗ chat_with_extraction: {message}")
+                        response_text, user_data, intent_data = openai_service.chat_with_extraction(message, conversation_history)
+                        action = "chat"
                     
                     # Кэшируем простые ответы
                     if len(response_text) < 200 and not any(keyword in message.lower() for keyword in ['документ', 'заявление', 'анкета', 'заявка']):
                         self.response_cache[cache_key] = response_text
+                        self.cache_timestamps[cache_key] = time.time()
                 
                 print(f"[SUCCESS] Получен ответ от AI (длина: {len(response_text)} символов)")
                 print(f"   Первые 100 символов: {response_text[:100]}...")
@@ -134,12 +196,18 @@ class AssistantService:
             print(f"Response: {response_text[:100]}...")
             print(f"{'='*60}\n")
             
-            try:
-                document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
-            except Exception as e:
-                print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation: {e}")
-                import traceback
-                traceback.print_exc()
+            # НЕ вызываем _check_document_creation при действии open_templates
+            # Документ будет создан только после выбора шаблона пользователем
+            if action != "open_templates":
+                try:
+                    document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
+                except Exception as e:
+                    print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    document_suggestion = None
+            else:
+                print(f"[INFO] Пропускаем _check_document_creation для действия: {action}")
                 document_suggestion = None
         
         print(f"\n{'='*60}")
@@ -223,9 +291,9 @@ class AssistantService:
             self._current_session_id = session_id
             logger.debug(f"Начата новая сессия аналитики: {session_id}")
         
-        # Проверка кэша для простых вопросов
+        # Проверка кэша для простых вопросов (отключен для тестирования)
         cache_key = message.lower().strip()
-        if cache_key in self.response_cache:
+        if False and cache_key in self.response_cache:  # Временно отключаем кэш
             logger.info("🚀 Используем кэшированный ответ (асинхронно)")
             self.performance_metrics["cache_hits"] += 1
             response_text = self.response_cache[cache_key]
@@ -236,11 +304,30 @@ class AssistantService:
             try:
                 logger.debug("Асинхронная отправка запроса к OpenAI/DeepSeek API...")
                 message_lower = message.lower()
+                print(f"[DEBUG] АСИНХРОННАЯ ОБРАБОТКА: {message}")
+                print(f"[DEBUG] message_lower: {message_lower}")
+                print(f"[DEBUG] Проверяем условия аналитического запроса...")
+                print(f"[DEBUG] 'тенденции' in message_lower: {'тенденции' in message_lower}")
+                print(f"[DEBUG] 'тренды' in message_lower: {'тренды' in message_lower}")
+                print(f"[DEBUG] 'анализ бизнеса' in message_lower: {'анализ бизнеса' in message_lower}")
                 if ("анализ мсп" in message_lower or "прогноз мсп" in message_lower or 
-                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
-                    logger.info("📊 Обнаружен запрос на анализ МСП (асинхронно)")
+                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower() or
+                    "тенденции" in message_lower or "тренды" in message_lower or
+                    "анализ бизнеса" in message_lower or "развитие бизнеса" in message_lower):
+                    logger.info("АНАЛИЗ: Обнаружен запрос на анализ МСП (асинхронно)")
+                    print(f"[DEBUG] АНАЛИТИЧЕСКИЙ ЗАПРОС ОБНАРУЖЕН: {message}")
                     response_text = openai_service.analyze_sme_trends(message)
                     action = "analysis"
+                    user_data, intent_data = {}, {}
+                elif any(keyword in message_lower for keyword in [
+                    "заполнить документ", "помочь заполнить", "автозаполнение", "заполнить заявление",
+                    "заполнить анкету", "помогите заполнить", "заполнить шаблон", 
+                    "оформить документ", "помочь с документом", "заполнить форму"
+                ]):
+                    logger.info("📝 Обнаружен запрос на заполнение документа (асинхронно)")
+                    print(f"[DEBUG] ОБНАРУЖЕН ЗАПРОС НА ЗАПОЛНЕНИЕ ДОКУМЕНТА: {message}")
+                    response_text = "Отлично! Я помогу вам заполнить документ. Сейчас откроется окно с доступными шаблонами для автозаполнения."
+                    action = "open_templates"
                     user_data, intent_data = {}, {}
                 elif ("контакт" in message_lower and ("опор" in message_lower and "росси" in message_lower)) or (
                     "региональн" in message_lower and ("опор" in message_lower and "росси" in message_lower)):
@@ -299,14 +386,39 @@ class AssistantService:
                         action = "chat"
                         user_data, intent_data = {}, {}
                 else:
-                    # Используем синхронный клиент для быстрых ответов
-                    response_text = openai_service.chat(message, conversation_history)
-                    action = "chat"
-                    user_data, intent_data = {}, {}
+                    # Проверяем, является ли это простым приветствием или представлением
+                    simple_greetings = [
+                        "меня зовут", "я", "привет", "здравствуйте", "добрый день", 
+                        "добрый вечер", "доброе утро", "как дела", "что нового",
+                        "здравствуй", "приветствую", "добро пожаловать"
+                    ]
+                    
+                    # Более точная проверка для простых представлений
+                    message_lower = message.lower().strip()
+                    is_simple_greeting = (
+                        any(greeting in message_lower for greeting in simple_greetings) and
+                        len(message.split()) <= 5 and
+                        not any(doc_keyword in message_lower for doc_keyword in [
+                            "документ", "заявление", "анкета", "заявка", "создать", 
+                            "оформить", "подать", "заполнить", "шаблон"
+                        ])
+                    )
+                    
+                    if is_simple_greeting:
+                        # Для простых приветствий используем обычный чат без извлечения данных
+                        response_text = openai_service.chat(message, conversation_history)
+                        user_data, intent_data = {}, {}
+                        action = "chat"
+                    else:
+                        # ОБЪЕДИНЕННЫЙ ЗАПРОС: диалог + извлечение данных + определение намерения
+                        print(f"[DEBUG] ОБЫЧНЫЙ ЗАПРОС ЧЕРЕЗ chat_with_extraction: {message}")
+                        response_text, user_data, intent_data = openai_service.chat_with_extraction(message, conversation_history)
+                        action = "chat"
                     
                     # Кэшируем простые ответы
                     if len(response_text) < 200 and not any(keyword in message.lower() for keyword in ['документ', 'заявление', 'анкета', 'заявка']):
                         self.response_cache[cache_key] = response_text
+                        self.cache_timestamps[cache_key] = time.time()
                 
                 print(f"[SUCCESS] Получен асинхронный ответ от AI (длина: {len(response_text)} символов)")
                 print(f"   Первые 100 символов: {response_text[:100]}...")
@@ -352,12 +464,19 @@ class AssistantService:
             print(f"Message: {message[:100]}...")
             print(f"Response: {response_text[:100]}...")
             print(f"{'='*60}\n")
-            try:
-                document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
-            except Exception as e:
-                print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation (ASYNC): {e}")
-                import traceback
-                traceback.print_exc()
+            
+            # НЕ вызываем _check_document_creation при действии open_templates
+            # Документ будет создан только после выбора шаблона пользователем
+            if action != "open_templates":
+                try:
+                    document_suggestion = self._check_document_creation(user_id, message, response_text, conversation_history)
+                except Exception as e:
+                    print(f"[ERROR] КРИТИЧЕСКАЯ ОШИБКА в _check_document_creation (ASYNC): {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"[INFO] Пропускаем _check_document_creation для действия: {action}")
+                document_suggestion = None
         
         # Обновляем метрики производительности
         elapsed_time = time.time() - start_time
@@ -1343,71 +1462,19 @@ class AssistantService:
                             suggested_template = templates[0]['name']
                             print(f" Используем первый доступный шаблон: {suggested_template}")
                     
-                    # Если есть рекомендуемый шаблон, создаём документ автоматически
+                    # НЕ создаём документ автоматически - ждём выбора шаблона пользователем
                     created_document = None
                     if suggested_template_id:
-                        try:
-                            print(f" Автоматическое создание документа: {suggested_template}")
-                            created_document = self.create_document_from_template(
-                                user_id=user_id,
-                                template_id=suggested_template_id,
-                                user_data=user_info,
-                                conversation_data={
-                                    "message": message,
-                                    "response": response
-                                },
-                                send_email=True  # Включаем автоматическую отправку email
-                            )
-                            print(f" Документ создан: {created_document.get('filepath')}")
-                            
-                            # НОВОЕ: Сохраняем информацию о документе в Google Sheets
-                            if created_document and created_document.get("status") == "success":
-                                try:
-                                    google_sheets_service.save_document({
-                                        "user_id": user_id,
-                                        "full_name": user_info.get("full_name", ""),
-                                        "email": user_info.get("email", ""),
-                                        "document_type": template_recommendation.get("document_category", "документ"),
-                                        "template_name": suggested_template,
-                                        "filepath": created_document.get("filepath", ""),
-                                        "download_url": created_document.get("download_url", ""),
-                                        "completeness_score": completeness_score,
-                                        "confidence_score": confidence_score,
-                                        "data_quality": completeness_analysis.get("data_quality", "")
-                                    })
-                                except Exception as e:
-                                    print(f" Ошибка сохранения в Google Sheets (не критично): {e}")
-                            
-                        except Exception as e:
-                            print(f" Ошибка автоматического создания: {e}")
-                            import traceback
-                            traceback.print_exc()
+                        print(f" Рекомендуемый шаблон найден: {suggested_template}, но документ НЕ создается автоматически")
+                        print(f" Пользователь должен выбрать шаблон в интерфейсе")
                     
-                    # Формируем сообщение с результатом
-                    if created_document and created_document.get("status") == "success":
-                        # Документ успешно создан
-                        download_url = created_document.get("download_url", "")
-                        filename = created_document.get("filepath", "").split("/")[-1]
+                    # Формируем сообщение с результатом (без автоматического создания документа)
+                    if suggested_template_id:
+                        # Есть рекомендуемый шаблон, но документ не создается автоматически
+                        print(f" Рекомендуется шаблон: {suggested_template}")
+                        print(f" Пользователь должен выбрать шаблон в интерфейсе")
                         
-                        result["message"] = f""" **Документ успешно создан!**
-
-**Тип документа:** {template_recommendation.get('document_category', 'документ')}
-**Шаблон:** {suggested_template}
-**Имя файла:** {filename}
-
-**Заполнено полей:** {len(completeness_analysis.get('filled_fields', []))} из {len(template_fields)}
-**Оценка полноты:** {completeness_score}%
-**Оценка уверенности:** {confidence_score}%
-**Качество данных:** {completeness_analysis.get('data_quality', 'неизвестно')}
-
- **Ваш документ готов к скачиванию!**
-
-**Скачать документ:** {settings.base_url}{download_url}"""
-                        
-                        result["created_document"] = created_document
-                        result["needs_data"] = False
-                    else:
-                        # Не удалось создать автоматически, предлагаем выбрать вручную
+                        # НЕ создаем документ автоматически - только предлагаем выбрать шаблон
                         result["message"] = f""" **Готов создать документ!**
 
 **Тип документа:** {template_recommendation.get('document_category', 'документ')}
@@ -1449,72 +1516,34 @@ class AssistantService:
                         if not suggested_template_id:
                             suggested_template_id = templates[0]['template_id']
                     
-                    # СОЗДАЕМ ДОКУМЕНТ несмотря на неполные данные
+                    # НЕ создаем документ автоматически даже с неполными данными
                     created_document = None
                     if suggested_template_id:
-                        try:
-                            print(f" Создание документа с неполными данными ({completeness_score}%)")
-                            created_document = self.create_document_from_template(
-                                user_id=user_id,
-                                template_id=suggested_template_id,
-                                user_data=user_info,
-                                conversation_data={
-                                    "message": message,
-                                    "response": response
-                                },
-                                send_email=True  # Включаем автоматическую отправку email
-                            )
-                            print(f" Документ создан с неполными данными: {created_document.get('filepath')}")
-                            
-                            # НОВОЕ: Сохраняем информацию о документе в Google Sheets
-                            if created_document and created_document.get("status") == "success":
-                                try:
-                                    # Находим название шаблона
-                                    template_name = next((t['name'] for t in templates if t['template_id'] == suggested_template_id), "Неизвестный шаблон")
-                                    
-                                    google_sheets_service.save_document({
-                                        "user_id": user_id,
-                                        "full_name": user_info.get("full_name", ""),
-                                        "email": user_info.get("email", ""),
-                                        "document_type": template_recommendation.get("document_category", "документ"),
-                                        "template_name": template_name,
-                                        "filepath": created_document.get("filepath", ""),
-                                        "download_url": created_document.get("download_url", ""),
-                                        "completeness_score": completeness_score,
-                                        "confidence_score": confidence_score,
-                                        "data_quality": completeness_analysis.get("data_quality", "")
-                                    })
-                                except Exception as e:
-                                    print(f" Ошибка сохранения в Google Sheets (не критично): {e}")
-                            
-                        except Exception as e:
-                            print(f" Ошибка создания: {e}")
-                            import traceback
-                            traceback.print_exc()
+                        print(f" Найден шаблон для неполных данных ({completeness_score}%), но документ НЕ создается автоматически")
+                        print(f" Пользователь должен выбрать шаблон в интерфейсе")
                     
-                    # Формируем сообщение
+                    # Формируем сообщение (без автоматического создания документа)
                     missing_list = "\n".join([f"• {field}" for field in missing_fields])
                     
-                    if created_document and created_document.get("status") == "success":
-                        # Документ создан, но с предупреждением о неполных данных
-                        download_url = created_document.get("download_url", "")
-                        filename = created_document.get("filepath", "").split("/")[-1]
+                    if suggested_template_id:
+                        # Есть шаблон, но документ не создается автоматически
+                        template_name = next((t['name'] for t in templates if t['template_id'] == suggested_template_id), "Неизвестный шаблон")
                         
-                        result["message"] = f""" **Документ создан!**
+                        result["message"] = f""" **Готов создать документ!**
 
- **Внимание:** Некоторые поля остались незаполненными ({completeness_score}% полноты).
+ **Внимание:** Некоторые поля могут остаться незаполненными ({completeness_score}% полноты).
 
 **Отсутствуют данные:**
 {missing_list}
 
-**Рекомендация:** Отредактируйте документ вручную или предоставьте недостающие данные для создания нового.
+**Рекомендуемый шаблон:** {template_name}
 
- **Документ доступен для скачивания:**"""
-                        
-                        result["created_document"] = created_document
+**Рекомендация:** Выберите шаблон для создания документа. Недостающие поля можно будет заполнить вручную.
+
+ **Выберите шаблон для создания документа:**"""
                         result["needs_data"] = False
                     else:
-                        # Не удалось создать даже с неполными данными
+                        # Не удалось найти подходящий шаблон
                         recommendations = completeness_analysis.get("recommendations", [])
                         recommendations_text = "\n".join([f"- {rec}" for rec in recommendations])
                         

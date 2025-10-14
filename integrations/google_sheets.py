@@ -215,12 +215,20 @@ class GoogleSheetsService:
             if not sheet:
                 logger.debug("Пропуск получения пользователей (Google Sheets не настроен)")
                 return []
-            data = sheet.get_all_records(expected_headers=[
-                "ID мероприятия", "Название", "Дата", "Время", 
-                "Описание", "Место проведения", "Участники", 
-                "Организатор", "Статус", "Дата создания"
-            ])
-            return data
+            
+            # Сначала пробуем получить данные с ожидаемыми заголовками
+            try:
+                data = sheet.get_all_records(expected_headers=[
+                    "ID пользователя", "ФИО", "Имя", "Фамилия",
+                    "Отчество", "Номер телефона", "Организация",
+                    "Должность", "Email", "Дата регистрации"
+                ])
+                return data
+            except Exception as header_error:
+                # Если не получается с ожидаемыми заголовками, получаем все данные
+                logger.warning(f"Не удалось получить данные с ожидаемыми заголовками: {header_error}")
+                data = sheet.get_all_records()
+                return data
         except Exception as e:
             log_error(logger, "Ошибка получения пользователей", error=e)
             return []

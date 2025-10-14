@@ -823,6 +823,11 @@
                 // Отображаем ответ бота
                 addMessage(data.response, 'bot');
                 
+                // Обрабатываем специальные действия
+                if (data.action === 'open_templates') {
+                    startAutofillProcess();
+                }
+                
                 // Показываем предложение документа если есть
                 if (data.document_suggestion && data.document_suggestion.suggested) {
                     showDocumentSuggestion(data.document_suggestion);
