@@ -33,7 +33,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Переменные окружения
 ENV PYTHONUNBUFFERED=1
-ENV HOST=127.0.0.1
+ENV HOST=0.0.0.0
 ENV PORT=8000
 
 # Настройки режима (можно переопределить через docker-compose)
