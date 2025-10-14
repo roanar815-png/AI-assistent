@@ -14,7 +14,8 @@ def test_improved_prompts():
     print("=" * 60)
     
     # URL API
-    api_url = "http://localhost:8000/api/chat/message"
+    from config import settings
+    api_url = f"{settings.base_url}/api/chat/message"
     
     # Тестовые запросы разных типов
     test_cases = [

@@ -227,8 +227,8 @@ async def lifespan(app: FastAPI):
     
     logger.info("=" * 80)
     logger.info("✅ ПРИЛОЖЕНИЕ УСПЕШНО ЗАПУЩЕНО И ГОТОВО К РАБОТЕ")
-    logger.info(f"🌐 API доступно по адресу: http://{settings.host}:{settings.port}")
-    logger.info(f"📚 Документация: http://{settings.host}:{settings.port}/docs")
+    logger.info(f"🌐 API доступно по адресу: {settings.base_url}")
+    logger.info(f"📚 Документация: {settings.base_url}/docs")
     logger.info("=" * 80)
     
     yield
