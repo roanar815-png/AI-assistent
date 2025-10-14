@@ -25,8 +25,8 @@ COPY . .
 # Создание необходимых директорий
 RUN mkdir -p reports generated_documents templates/documents /var/log/supervisor
 
-# Копирование конфигурации Nginx
-COPY nginx.conf /etc/nginx/sites-available/default
+# Копирование конфигурации Nginx (шаблон с переменными)
+COPY nginx.conf /etc/nginx/sites-available/default.template
 
 # Копирование конфигурации Supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -35,6 +35,8 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
 ENV PORT=8000
+ENV BACKEND_HOST=localhost
+ENV BACKEND_PORT=8000
 
 # Настройки режима (можно переопределить через docker-compose)
 ENV ENVIRONMENT=${ENVIRONMENT:-production}
@@ -48,5 +50,9 @@ ENV DEBUG=False
 # Открытие портов
 EXPOSE 80 8000
 
+# Скрипт запуска с обработкой переменных
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 # Команда запуска
-CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/start.sh"]

@@ -15,6 +15,8 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-local}
       - DEBUG=${DEBUG:-True}
       - BASE_URL=${BASE_URL:-http://localhost}
+      - BACKEND_HOST=${BACKEND_HOST:-localhost}
+      - BACKEND_PORT=${BACKEND_PORT:-8000}
       - PYTHONUNBUFFERED=1
       - GOOGLE_CREDENTIALS_FILE=credentials.json  # Файл смонтирован как credentials.json
       - GOOGLE_SHEET_ID=1HDohFNTAKWBTMJFo1rYv5iINeoiVJtJcdy-7SQSOPDQ  # Правильный ID таблицы
@@ -38,7 +40,7 @@ services:
       - ./logs:/var/log/supervisor
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
       timeout: 10s
       retries: 3
