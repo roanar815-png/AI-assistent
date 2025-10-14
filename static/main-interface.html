@@ -834,6 +834,11 @@
                     return;
                 }
                 console.error('Ошибка отправки сообщения:', error);
+                console.error('Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
                 hideTypingIndicator();
                 addMessage('❌ Извините, произошла ошибка. Попробуйте позже.', 'bot');
             } finally {
