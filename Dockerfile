@@ -35,8 +35,8 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 ENV PYTHONUNBUFFERED=1
 ENV HOST=0.0.0.0
 ENV PORT=8000
-ENV BACKEND_HOST=localhost
-ENV BACKEND_PORT=8000
+ENV BACKEND_HOST=${BACKEND_HOST}
+ENV BACKEND_PORT=${BACKEND_PORT}
 
 # Настройки режима (можно переопределить через docker-compose)
 ENV ENVIRONMENT=${ENVIRONMENT:-production}
