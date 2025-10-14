@@ -1,9 +1,11 @@
+# -*- coding: utf-8 -*-
 """
 Главный файл приложения FastAPI
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -246,7 +248,8 @@ app = FastAPI(
     title="AI Ассистент Опора России",
     description="Умный ассистент для поддержки МСП",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    default_response_class=JSONResponse
 )
 
 # CORS middleware
@@ -258,8 +261,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Middleware для правильной обработки кодировки
+@app.middleware("http")
+async def charset_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if response.headers.get("content-type", "").startswith("application/json"):
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
+
 # Middleware для логирования всех запросов
-from fastapi import Request
 import time
 
 @app.middleware("http")
