@@ -30,7 +30,12 @@ ENV/
 .venv/
 
 # Environment variables and secrets
-# .env - разрешено для редактирования
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+*.env
 
 !env.example
 
