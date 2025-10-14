@@ -25,13 +25,13 @@ MANIFEST
 
 # Virtual Environment
 venv/
-env/
+
 ENV/
 .venv/
 
 # Environment variables and secrets
 # .env - разрешено для редактирования
-*.env
+
 !env.example
 
 # Google API credentials and tokens
