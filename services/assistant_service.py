@@ -97,8 +97,21 @@ class AssistantService:
             # Проверка на специальные команды
             try:
                 logger.debug("Отправка запроса к OpenAI/DeepSeek API...")
-                if ("анализ мсп" in message.lower() or "прогноз мсп" in message.lower() or 
-                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower() or
+                # Проверка на прогнозирование рынка
+                if ("прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
+                    logger.info("ПРОГНОЗ: Обнаружен запрос на прогнозирование рынка")
+                    response_text = openai_service.market_forecast(message)
+                    action = "analysis"
+                    user_data, intent_data = {}, {}
+                # Проверка на бизнес-инсайты
+                elif ("бизнес-инсайты" in message.lower() or "бизнес инсайты" in message.lower() or 
+                      "инсайты" in message.lower() and "бизнес" in message.lower()):
+                    logger.info("ИНСАЙТЫ: Обнаружен запрос на бизнес-инсайты")
+                    response_text = openai_service.business_insights(message)
+                    action = "analysis"
+                    user_data, intent_data = {}, {}
+                # Проверка на анализ тенденций МСП
+                elif ("анализ мсп" in message.lower() or "прогноз мсп" in message.lower() or
                     "тенденции" in message.lower() or "тренды" in message.lower() or
                     "анализ бизнеса" in message.lower() or "развитие бизнеса" in message.lower()):
                     logger.info("АНАЛИЗ: Обнаружен запрос на анализ МСП")
@@ -310,8 +323,23 @@ class AssistantService:
                 print(f"[DEBUG] 'тенденции' in message_lower: {'тенденции' in message_lower}")
                 print(f"[DEBUG] 'тренды' in message_lower: {'тренды' in message_lower}")
                 print(f"[DEBUG] 'анализ бизнеса' in message_lower: {'анализ бизнеса' in message_lower}")
-                if ("анализ мсп" in message_lower or "прогноз мсп" in message_lower or 
-                    "прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower() or
+                # Проверка на прогнозирование рынка
+                if ("прогнозирование рынка" in message.lower() or "прогноз рынка" in message.lower()):
+                    logger.info("ПРОГНОЗ: Обнаружен запрос на прогнозирование рынка (асинхронно)")
+                    print(f"[DEBUG] ПРОГНОЗ РЫНКА ОБНАРУЖЕН: {message}")
+                    response_text = openai_service.market_forecast(message)
+                    action = "analysis"
+                    user_data, intent_data = {}, {}
+                # Проверка на бизнес-инсайты
+                elif ("бизнес-инсайты" in message_lower or "бизнес инсайты" in message_lower or 
+                      "инсайты" in message_lower and "бизнес" in message_lower):
+                    logger.info("ИНСАЙТЫ: Обнаружен запрос на бизнес-инсайты (асинхронно)")
+                    print(f"[DEBUG] БИЗНЕС-ИНСАЙТЫ ОБНАРУЖЕНЫ: {message}")
+                    response_text = openai_service.business_insights(message)
+                    action = "analysis"
+                    user_data, intent_data = {}, {}
+                # Проверка на анализ тенденций МСП
+                elif ("анализ мсп" in message_lower or "прогноз мсп" in message_lower or
                     "тенденции" in message_lower or "тренды" in message_lower or
                     "анализ бизнеса" in message_lower or "развитие бизнеса" in message_lower):
                     logger.info("АНАЛИЗ: Обнаружен запрос на анализ МСП (асинхронно)")
